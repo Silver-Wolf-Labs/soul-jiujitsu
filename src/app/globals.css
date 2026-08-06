@@ -1,0 +1,201 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-white text-ink font-body antialiased overflow-x-hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display tracking-wide;
+  }
+}
+
+/* Analytics loading state — PeriodBar flips
+   `body[data-analytics-loading="true"]` during startTransition so the
+   content below the sticky filter bar dims while a new data fetch is in
+   flight. The bar itself stays crisp so the user can keep interacting
+   (change period, pick a different filter) without feeling locked out. */
+body[data-analytics-loading="true"] [data-analytics-content] {
+  opacity: 0.55;
+  filter: blur(1.2px);
+  pointer-events: none;
+  transition: opacity 180ms ease-out, filter 180ms ease-out;
+}
+
+@layer utilities {
+  /* Jumbotron subtle grid pattern */
+  .bg-grid-pattern {
+    background-image: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 48px,
+        color-mix(in srgb, var(--color-ink) 3%, transparent 97%) 48px,
+        color-mix(in srgb, var(--color-ink) 3%, transparent 97%) 49px
+      ),
+      repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent 48px,
+        color-mix(in srgb, var(--color-ink) 3%, transparent 97%) 48px,
+        color-mix(in srgb, var(--color-ink) 3%, transparent 97%) 49px
+      );
+  }
+}
+
+/* Alert dot pulse */
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Pulsating danger ring — used on schedule cards flagged with an
+   error-tier issue in admin mode. Two-layer box-shadow: the inner
+   2px stays constant (so the card is always clearly "ringed"), the
+   outer halo expands and fades to draw the eye. Uses the theme's
+   `--color-status-error` var so custom themes get the right red
+   automatically. Ring utility (`ring-2 ring-danger`) is NOT applied
+   alongside this — Tailwind's ring is also a box-shadow layer and
+   would collide with the animation. */
+@keyframes pulse-danger-ring {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px var(--color-status-error),
+      0 0 0 2px color-mix(in srgb, var(--color-status-error) 45%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px var(--color-status-error),
+      0 0 0 10px color-mix(in srgb, var(--color-status-error) 0%, transparent);
+  }
+}
+
+.animate-pulse-danger-ring {
+  animation: pulse-danger-ring 1.6s ease-in-out infinite;
+}
+
+/* Pulsating warning ring — warn-tier issue cards (e.g. "no
+   instructor"). Two layers chosen for visibility on busy card
+   backgrounds:
+     1. static dashed `outline` at `--color-yellow-dark` — the
+        dashed pattern carries its own "caution" semiotic and stays
+        visible even at the halo's lowest-alpha frame.
+     2. animated `box-shadow` halo using `yellow-dark` — expands
+        0 → 10px and fades to transparent over a 2s cycle.
+   Uses `outline` instead of Tailwind's `ring-*` so it composes
+   cleanly with the keyframe's box-shadow (Tailwind rings are also
+   box-shadow layers and would collide). 2s cycle is deliberately
+   slower than the error ring's 1.6s — preserves severity hierarchy
+   (warnings feel "important", errors feel "urgent"). */
+@keyframes pulse-warning-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-yellow-dark) 60%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--color-yellow-dark) 0%, transparent);
+  }
+}
+
+.animate-pulse-warning-ring {
+  outline: 2px dashed var(--color-yellow-dark);
+  outline-offset: 0;
+  border-radius: inherit;
+  animation: pulse-warning-ring 2s ease-in-out infinite;
+}
+
+/* Respect users who prefer reduced motion — surface the same color
+   semantics but without the expanding halos, so the signals are
+   still present but don't strobe. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-danger-ring {
+    animation: none;
+    box-shadow: 0 0 0 2px var(--color-status-error);
+  }
+  .animate-pulse-warning-ring {
+    animation: none;
+  }
+}
+
+/* Smooth fade-in for cycling content */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.5s ease forwards;
+}
+
+/* Admin page entrance — fast fade + subtle lift */
+@keyframes adminPageIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-admin-page-in {
+  animation: adminPageIn 0.25s ease-out forwards;
+}
+
+/* Loading spinner — 0.5s delay so fast navigations never flash the spinner */
+@keyframes adminLoadingIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-admin-loading-in {
+  opacity: 0;
+  animation: adminLoadingIn 0.2s ease-out 0.5s forwards;
+}
+
+/* Hide scrollbar for snap carousels */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Kiosk class-list entrance — subtle fade + slight lift. Staggered via
+   inline `animation-delay` on each item for a modern, unhurried feel. */
+@keyframes kioskListIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-kiosk-list-in {
+  opacity: 0;
+  animation: kioskListIn 320ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Scroll fade mask — content dissolves into the background at both edges.
+   Uses only the alpha channel so it's background-color-agnostic.
+   10% fade zone ≈ one class card height: subtle but clearly directional. */
+.scroll-fade-mask {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 10%,
+    black 90%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 10%,
+    black 90%,
+    transparent 100%
+  );
+}

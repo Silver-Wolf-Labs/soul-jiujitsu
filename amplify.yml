@@ -1,0 +1,25 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - nvm install 20
+        - nvm use 20
+        # npm install (not ci): the lockfile omits top-level entries for
+        # Linux-only optional deps like @emnapi/* pulled in by
+        # @rolldown/binding-wasm32-wasi, because we generate it on macOS.
+        # `npm ci` fails strict on the missing entries; `npm install`
+        # resolves them against the registry and proceeds.
+        - npm install --no-audit --no-fund
+    build:
+      commands:
+        - env | grep -E '^(NEXT_PUBLIC_|SUPABASE_SERVICE_ROLE_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|CRON_SECRET|NODE_ENV)' > .env.production
+        - npm run build
+  artifacts:
+    baseDirectory: .next
+    files:
+      - "**/*"
+  cache:
+    paths:
+      - node_modules/**/*
+      - .next/cache/**/*
