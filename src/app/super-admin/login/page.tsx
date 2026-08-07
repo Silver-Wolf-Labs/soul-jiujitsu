@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { superAdminLogin } from "./actions";
 
 export default function SuperAdminLoginPage() {
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -13,13 +12,29 @@ export default function SuperAdminLoginPage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
+    // Read the password from the submitted form, not from React state.
+    //
+    // The input is uncontrolled (no `value` prop): a password manager writes the
+    // DOM value without firing a React change event, so a controlled input would
+    // have React clear that autofill during hydration and submit an empty
+    // string. See the admin login for the full explanation.
+    const fd = new FormData(e.target as HTMLFormElement);
+    const passwordValue = (fd.get("password") as string) ?? "";
+    if (!passwordValue) {
+      setError("Please enter the platform admin password.");
+      return;
+    }
+
     startTransition(async () => {
-      const result = await superAdminLogin(password);
+      const result = await superAdminLogin(passwordValue);
       if (result.success) {
         router.push("/super-admin");
       } else {
         setError(result.error || "Login failed.");
-        setPassword("");
+        // Clear the field on a failed attempt so the next try starts fresh.
+        const el = (e.target as HTMLFormElement).elements.namedItem("password");
+        if (el instanceof HTMLInputElement) el.value = "";
       }
     });
   }
@@ -61,11 +76,12 @@ export default function SuperAdminLoginPage() {
             >
               Password
             </label>
+            {/* Uncontrolled on purpose — see handleSubmit. A `value` prop makes
+                React clear a password manager's pre-hydration autofill. */}
             <input
               id="password"
+              name="password"
               type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
               autoComplete="one-time-code"
               autoFocus
               required
@@ -86,9 +102,13 @@ export default function SuperAdminLoginPage() {
             </div>
           )}
 
+          {/* Not disabled on emptiness: with an uncontrolled input there is no
+              state to gate on, and gating on it would re-introduce the autofill
+              bug (React wouldn't know the field was filled, so the button would
+              stay dead). `required` + the guard in handleSubmit cover it. */}
           <button
             type="submit"
-            disabled={isPending || !password}
+            disabled={isPending}
             className="w-full py-3 rounded-lg bg-yellow text-black font-semibold text-sm
                        hover:bg-yellow-light transition-colors disabled:opacity-50
                        disabled:cursor-not-allowed"

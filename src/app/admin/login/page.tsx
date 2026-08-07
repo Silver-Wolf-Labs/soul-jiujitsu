@@ -9,20 +9,36 @@ import { useGymProfile } from "@/lib/gym-profile-context";
 
 export default function AdminLoginPage() {
   const profile = useGymProfile();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
 
+    // Read the credentials from the submitted form, not from React state.
+    //
+    // The inputs are deliberately UNcontrolled (no `value` prop). A password
+    // manager writes the DOM value directly without firing a React change
+    // event, so with controlled inputs React would mount holding "" and its
+    // reconciliation would CLEAR whatever autofill had put there — before any
+    // effect could read it. The submit then posted {email: "", password: ""},
+    // GoTrue answered 400 "missing email or phone", and the branch below
+    // reported it as "Invalid email or password" — blaming credentials that
+    // were correct all along. Intermittently, since it depended on autofill
+    // winning the race against hydration.
+    //
+    // Leaving the DOM as the single source of truth removes the race entirely.
+    const fd = new FormData(e.target as HTMLFormElement);
+    const emailValue = ((fd.get("email") as string) ?? "").trim();
+    const passwordValue = (fd.get("password") as string) ?? "";
+
     const supabase = createClient();
     const { error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+      email: emailValue,
+      password: passwordValue,
     });
 
     if (authError) {
@@ -69,10 +85,11 @@ export default function AdminLoginPage() {
               <label className="block text-[11px] font-semibold tracking-wider uppercase text-muted mb-1.5">
                 Email
               </label>
+              {/* Uncontrolled on purpose — see handleSubmit. A `value` prop
+                  makes React clear a password manager's pre-hydration autofill. */}
               <input
                 type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                name="email"
                 required
                 autoComplete="off"
                 className="w-full bg-off-white border border-line text-ink px-3.5 py-2.5 rounded text-sm outline-none focus:border-blue-mid focus:ring-2 focus:ring-blue-mid/10 transition-colors"
@@ -86,8 +103,7 @@ export default function AdminLoginPage() {
               </label>
               <input
                 type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                name="password"
                 required
                 autoComplete="off"
                 className="w-full bg-off-white border border-line text-ink px-3.5 py-2.5 rounded text-sm outline-none focus:border-blue-mid focus:ring-2 focus:ring-blue-mid/10 transition-colors"

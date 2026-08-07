@@ -12,8 +12,6 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const urlError = searchParams.get("error");
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -21,8 +19,21 @@ function LoginForm() {
     e.preventDefault();
     setError(null);
     setLoading(true);
+
+    // Read the credentials from the submitted form, not from React state — the
+    // inputs are deliberately uncontrolled so React can't clear a password
+    // manager's autofill during hydration. This form is the most exposed of the
+    // three: its autoComplete hints ("email" / "current-password") actively
+    // invite that autofill. See the admin login for the full explanation.
+    const fd = new FormData(e.target as HTMLFormElement);
+    const emailValue = ((fd.get("email") as string) ?? "").trim();
+    const passwordValue = (fd.get("password") as string) ?? "";
+
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: emailValue,
+      password: passwordValue,
+    });
     if (error) {
       if (error.message.toLowerCase().includes("email not confirmed")) {
         setError("Please confirm your email before signing in. Check your inbox for a verification link.");
@@ -58,10 +69,11 @@ function LoginForm() {
           <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">
             Email
           </label>
+          {/* Uncontrolled on purpose — see handleSubmit. A `value` prop makes
+              React clear a password manager's pre-hydration autofill. */}
           <input
             type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            name="email"
             required
             autoComplete="email"
             inputMode="email"
@@ -81,8 +93,7 @@ function LoginForm() {
           </div>
           <input
             type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            name="password"
             required
             autoComplete="current-password"
             className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black"
