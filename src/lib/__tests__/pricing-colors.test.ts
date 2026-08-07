@@ -31,9 +31,13 @@ describe("pricing highlight color maps", () => {
     });
   });
 
-  it("HIGHLIGHT_BORDER_HEX values are valid hex colors", () => {
-    Object.values(HIGHLIGHT_BORDER_HEX).forEach((hex) => {
-      expect(hex).toMatch(/^#[0-9a-f]{3,6}$/i);
+  it("HIGHLIGHT_BORDER_HEX values are theme-responsive CSS var references", () => {
+    // These used to be literal hex. They were deliberately moved to CSS custom
+    // properties so a border follows the active theme instead of staying frozen
+    // at the default palette's value — assert the var() form, because a literal
+    // hex sneaking back in is the actual regression now.
+    Object.values(HIGHLIGHT_BORDER_HEX).forEach((value) => {
+      expect(value).toMatch(/^var\(--color-[a-z-]+\)$/);
     });
   });
 });

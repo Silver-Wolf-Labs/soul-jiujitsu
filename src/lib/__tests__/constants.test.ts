@@ -60,10 +60,13 @@ describe("UPDATE_TAG_CONFIG", () => {
 });
 
 describe("BELT_COLOR_MAP", () => {
-  it("maps all belt colors to hex strings", () => {
+  it("maps every belt to a theme-responsive CSS var reference", () => {
+    // Was literal hex; deliberately moved to CSS custom properties so belts
+    // follow the active theme. A hard-coded hex creeping back in is the
+    // regression this now guards against.
     Object.values(BeltColor).forEach((belt) => {
-      const hex = BELT_COLOR_MAP[belt];
-      expect(hex).toMatch(/^#[0-9a-f]{3,6}$/i);
+      expect(BELT_COLOR_MAP[belt], `BELT_COLOR_MAP missing "${belt}"`)
+        .toMatch(/^var\(--color-belt-[a-z-]+\)$/);
     });
   });
 });
