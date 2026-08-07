@@ -26,6 +26,16 @@ jobs:
       # pass without attempting a network call against Supabase.
       NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: build-time-placeholder
+      # Needed for the same reason, and its absence was failing the build
+      # rather than skipping a fetch: /kiosk is a static route whose layout
+      # calls getKioskUiConfig, which constructs the service-role client at
+      # prerender time — and createClient throws "supabaseKey is required" on
+      # an empty key before any request is made, so the export step aborts.
+      # A placeholder is safe here: the URL above points nowhere, so the
+      # client is built and then fails its fetch, which getKioskUiConfig
+      # already handles by falling back to DEFAULT_KIOSK_UI_CONFIG. The real
+      # key is a deploy-time secret and must never be a CI env var.
+      SUPABASE_SERVICE_ROLE_KEY: build-time-placeholder
     steps:
       - uses: actions/checkout@v4
         with:
