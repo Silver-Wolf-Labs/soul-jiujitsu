@@ -14,7 +14,7 @@ import type { TeamMember } from "@/lib/supabase/types";
 
 // Fallback data for when Supabase isn't connected
 const FALLBACK_TEAM: TeamMember[] = [
-  { id: 1, name: "Head Coach", role: "Head Instructor", belt: BeltColor.Black, bio: "Add your team via the admin panel.", photo_url: null, slug: "head-coach", order: 0, type: TeamMemberType.HeadCoach, active: true, visible_on_public_team: true, visible_until: null },
+  { id: 1, name: "Profesor Soul", role: "Profesor principal", belt: BeltColor.Black, bio: "Lidera cada clase con técnica, paciencia y respeto. Muy pronto conocerás aquí a todo el equipo.", photo_url: null, slug: "head-coach", order: 0, type: TeamMemberType.HeadCoach, active: true, visible_on_public_team: true, visible_until: null },
 ];
 
 export default async function TeamMemberPage({
@@ -34,6 +34,17 @@ export default async function TeamMemberPage({
       .single();
     if (data) member = data as TeamMember;
   } catch {
+    // Swallowed: handled by the fallback below, which also covers the
+    // no-error-but-no-row case.
+  }
+
+  // Fall back whenever the DB produced no row — not only when the query threw.
+  // `TeamGrid` shows FALLBACK_TEAM whenever its query comes back *empty*
+  // (`data.length > 0`), but an empty result does not raise, so this page used
+  // to fall back only inside `catch`. On a gym whose `team` table is empty the
+  // grid therefore rendered a "Profesor Soul" card linking to /team/head-coach,
+  // and that link 404'd. Matching the grid's condition keeps the two in step.
+  if (!member) {
     member = FALLBACK_TEAM.find((m) => m.slug === slug) ?? null;
   }
 
@@ -57,7 +68,7 @@ export default async function TeamMemberPage({
             href="/#team"
             className="inline-flex items-center gap-2 text-[13px] text-muted hover:text-ink transition-colors font-medium"
           >
-            <ArrowLeft className="w-4 h-4" />Back to Team
+            <ArrowLeft className="w-4 h-4" />Volver al equipo
           </Link>
         </div>
 
@@ -108,7 +119,7 @@ export default async function TeamMemberPage({
 
             {/* Bio */}
             <div className="max-w-2xl">
-              <h2 className="font-display text-2xl text-black mb-4">About</h2>
+              <h2 className="font-display text-2xl text-black mb-4">Trayectoria</h2>
               <p className="text-[16px] text-muted leading-relaxed">{member.bio}</p>
             </div>
           </div>

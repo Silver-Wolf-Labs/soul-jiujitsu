@@ -74,6 +74,7 @@ function slotClassType(slot: EnrichedScheduleSlot): ClassType {
   switch (slot.modality_slug) {
     case "gi":                return ClassType.Gi;
     case "no-gi":             return ClassType.NoGi;
+    case "kids":              return ClassType.Youth;
     case "open-mat":          return ClassType.OpenMat;
     case "competition-prep":  return ClassType.Special;
     case "conditioning":      return ClassType.Special;
@@ -85,6 +86,27 @@ function slotClassType(slot: EnrichedScheduleSlot): ClassType {
 function dayName(dow: number): DayOfWeek {
   return DAYS_OF_WEEK[dow - 1] as DayOfWeek;
 }
+
+// ── Spanish display labels (data keys stay English) ───────────────────────
+const DAY_LABEL_ES: Record<DayOfWeek, string> = {
+  Monday: "Lunes",
+  Tuesday: "Martes",
+  Wednesday: "Miércoles",
+  Thursday: "Jueves",
+  Friday: "Viernes",
+  Saturday: "Sábado",
+  Sunday: "Domingo",
+};
+
+const DAY_SHORT_ES: Record<DayOfWeek, string> = {
+  Monday: "Lun",
+  Tuesday: "Mar",
+  Wednesday: "Mié",
+  Thursday: "Jue",
+  Friday: "Vie",
+  Saturday: "Sáb",
+  Sunday: "Dom",
+};
 
 // ── Concurrent-slot grouping ───────────────────────────────────────────────
 interface TimeSlotGroup {
@@ -128,13 +150,14 @@ interface FilterChip {
 
 function buildFilters(modalities: ClassModality[]): FilterChip[] {
   return [
-    { label: "All", value: "all" },
+    { label: "Todas", value: "all" },
     ...modalities.map((m) => {
       // Map known slugs back to the existing theme so nothing visually shifts
       // for the 5 seed modalities. New slugs rely on `color` or are neutral.
       const legacyTheme: Record<string, { dot: string }> = {
         "gi":               { dot: CLASS_TYPE_CONFIG[ClassType.Gi].dotColor },
         "no-gi":            { dot: CLASS_TYPE_CONFIG[ClassType.NoGi].dotColor },
+        "kids":             { dot: CLASS_TYPE_CONFIG[ClassType.Youth].dotColor },
         "open-mat":         { dot: CLASS_TYPE_CONFIG[ClassType.OpenMat].dotColor },
         "competition-prep": { dot: CLASS_TYPE_CONFIG[ClassType.Special].dotColor },
       };
@@ -158,18 +181,18 @@ function matchesFilter(slot: EnrichedScheduleSlot, filter: string): boolean {
 type TimePeriod = "all" | "morning" | "afternoon" | "evening";
 
 const TIME_FILTERS: { label: string; value: TimePeriod; hint: string }[] = [
-  { label: "All Day",   value: "all",       hint: "" },
-  { label: "Morning",   value: "morning",   hint: "until 12pm" },
-  { label: "Afternoon", value: "afternoon", hint: "12–6pm" },
-  { label: "Evening",   value: "evening",   hint: "after 6pm" },
+  { label: "Todo el día", value: "all",       hint: "" },
+  { label: "Mañana",      value: "morning",   hint: "hasta 12 p.m." },
+  { label: "Tarde",       value: "afternoon", hint: "12–6 p.m." },
+  { label: "Noche",       value: "evening",   hint: "después de 6 p.m." },
 ];
 
 const PERIODS: Exclude<TimePeriod, "all">[] = ["morning", "afternoon", "evening"];
 
 const PERIOD_LABEL: Record<Exclude<TimePeriod, "all">, string> = {
-  morning:   "Morning",
-  afternoon: "Afternoon",
-  evening:   "Evening",
+  morning:   "Mañana",
+  afternoon: "Tarde",
+  evening:   "Noche",
 };
 
 function timeToMinutes(time: string): number {
@@ -596,7 +619,7 @@ function ExpandableGroup({
         onClick={() => onToggle(expandKey)}
         className="w-full text-left text-[10px] font-semibold text-muted/70 hover:text-ink bg-yellow-today hover:bg-yellow-light border border-dashed border-yellow-border hover:border-yellow rounded px-2.5 py-1.5 transition-colors duration-150 cursor-pointer"
       >
-        + {overflow.length} more at {formatTime(group.time)}
+        +{overflow.length} más · {formatTime(group.time)}
       </button>
     </div>
   );
@@ -662,7 +685,7 @@ function WeekDayColumn({
             onClick={() => onToggleGroup(key)}
             className="w-full text-left text-[10px] font-semibold text-muted/60 hover:text-ink bg-yellow-today hover:bg-yellow-light border border-dashed border-yellow-border hover:border-yellow rounded px-2.5 py-1 mt-1 transition-colors duration-150 cursor-pointer"
           >
-            <ChevronUp className="w-3 h-3 inline mr-1" />collapse
+            <ChevronUp className="w-3 h-3 inline mr-1" />cerrar
           </button>
         </div>
       );
@@ -853,8 +876,8 @@ export default function Schedule({
     setSelectedDay(t);
   }, []);
 
-  const tag   = sectionConfig?.display_subtitle ?? "When We Train";
-  const title = sectionConfig?.display_title    ?? "Class Schedule";
+  const tag   = sectionConfig?.display_subtitle ?? "Entrena con nosotros";
+  const title = sectionConfig?.display_title    ?? "Horarios";
 
   const filtered = useMemo(() => {
     let result = [...schedule].sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time));
@@ -932,14 +955,15 @@ export default function Schedule({
           owns its own header + toolbar). */}
       {!adminMode && (
         <>
-          <div className="inline-flex items-center gap-2 font-mono text-[13px] tracking-ultra uppercase text-blue-mid border-l-[3px] border-blue-mid pl-2.5 mb-4">
+          <div className="inline-flex items-center gap-2 font-mono text-[13px] tracking-ultra uppercase text-blue-mid border-l-[3px] border-yellow pl-2.5 mb-4">
             {tag}
           </div>
-          <h2 className="font-display text-[clamp(50px,6vw,80px)] text-black leading-none mb-2">
+          <h2 className="text-[clamp(40px,5.5vw,68px)] text-black leading-none mb-2">
             {title}
           </h2>
-          <p className="text-[15px] text-muted mb-6 max-w-[520px] leading-relaxed">
-            Seven days a week. Filter by class type or switch to Focus view for a 3-day close-up.
+          <p className="text-[15px] text-muted mb-6 max-w-[560px] leading-relaxed">
+            Gi, No-Gi, kids y open mats. Filtra por tipo de clase o por horario.{" "}
+            <span className="text-ink font-medium">Consulta por clases privadas.</span>
           </p>
         </>
       )}
@@ -1046,7 +1070,7 @@ export default function Schedule({
                   : "text-muted hover:text-ink"
               }`}
             >
-              {mode === "week" ? "Week" : "Focus"}
+              {mode === "week" ? "Semana" : "Detalle"}
             </button>
           ))}
         </div>
@@ -1070,7 +1094,7 @@ export default function Schedule({
                     : "bg-white border border-line text-muted"
                 }`}
               >
-                {day.slice(0, 3)}
+                {DAY_SHORT_ES[day as DayOfWeek]}
                 {isToday && !isSelected && (
                   <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-yellow block" />
                 )}
@@ -1087,10 +1111,10 @@ export default function Schedule({
           <div className={`font-display text-[22px] text-black pb-2.5 border-b-2 mb-3 flex items-center justify-between ${
             today !== null && effectiveDay === today ? "border-b-yellow" : "border-b-line"
           }`}>
-            {effectiveDay}
+            {DAY_LABEL_ES[effectiveDay]}
             {today !== null && effectiveDay === today && (
               <span className="font-body text-[9px] font-bold tracking-[0.1em] uppercase bg-yellow text-black px-1.5 py-0.5 rounded-full">
-                Today
+                Hoy
               </span>
             )}
           </div>
@@ -1119,10 +1143,10 @@ export default function Schedule({
                       isToday ? "border-b-yellow" : "border-b-line"
                     }`}
                   >
-                    {day.slice(0, 3)}
+                    {DAY_SHORT_ES[day as DayOfWeek]}
                     {isToday && (
                       <span className="font-body text-[9px] font-bold tracking-[0.1em] uppercase bg-yellow text-black px-1.5 py-0.5 rounded-full">
-                        Today
+                        Hoy
                       </span>
                     )}
                   </div>
@@ -1156,7 +1180,7 @@ export default function Schedule({
                   onClick={() => setFocusStart((s) => Math.max(0, s - 1))}
                   disabled={!canPrev}
                   className="w-7 h-7 rounded-full border border-line flex items-center justify-center text-sm text-muted hover:text-ink hover:border-black transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                  aria-label="Previous day"
+                  aria-label="Día anterior"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
@@ -1164,12 +1188,12 @@ export default function Schedule({
                   onClick={() => setFocusStart((s) => Math.min(s + 1, daysWithClasses.length - FOCUS_WINDOW))}
                   disabled={!canNext}
                   className="w-7 h-7 rounded-full border border-line flex items-center justify-center text-sm text-muted hover:text-ink hover:border-black transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                  aria-label="Next day"
+                  aria-label="Día siguiente"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
                 <span className="text-xs text-muted font-mono ml-1">
-                  {focusDays[0]?.slice(0, 3)} – {focusDays[focusDays.length - 1]?.slice(0, 3)}
+                  {focusDays[0] ? DAY_SHORT_ES[focusDays[0] as DayOfWeek] : ""} – {focusDays[focusDays.length - 1] ? DAY_SHORT_ES[focusDays[focusDays.length - 1] as DayOfWeek] : ""}
                 </span>
               </div>
 
@@ -1178,7 +1202,7 @@ export default function Schedule({
                   onClick={() => setFocusStart(todayFocusStart)}
                   className="text-xs font-semibold text-orange hover:text-orange-mid bg-orange-light border border-orange-border rounded-full px-3 py-1 transition-colors cursor-pointer"
                 >
-                  Jump to today
+                  Ir a hoy
                 </button>
               )}
             </div>
@@ -1193,10 +1217,10 @@ export default function Schedule({
                       isToday ? "border-b-yellow" : "border-b-line"
                     }`}
                   >
-                    {day}
+                    {DAY_LABEL_ES[day as DayOfWeek]}
                     {isToday && (
                       <span className="font-body text-[9px] font-bold tracking-[0.1em] uppercase bg-yellow text-black px-1.5 py-0.5 rounded-full">
-                        Today
+                        Hoy
                       </span>
                     )}
                   </div>

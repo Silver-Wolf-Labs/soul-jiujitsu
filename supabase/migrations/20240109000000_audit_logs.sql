@@ -35,9 +35,27 @@ CREATE POLICY "admin_insert_audit_logs" ON audit_logs
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3-year retention cleanup via pg_cron
 -- Runs at 3am UTC every day. Deletes rows older than 3 years.
+--
+-- Guarded because pg_cron is not enabled by default on a new Supabase project,
+-- and an unguarded `cron.schedule` aborts this migration's transaction — which
+-- takes down `audit_logs` and every migration after it. That is exactly what
+-- happened on a fresh staging project: 5 of 69 migrations applied and the push
+-- stopped here. `20260419120000_p0_hardening.sql` already handles the same
+-- problem by leaving its schedule commented out.
+--
+-- To turn the retention job on: Dashboard → Database → Extensions → enable
+-- `pg_cron`, then re-run this block. Without it the table still works; rows
+-- simply accumulate rather than being pruned.
 -- ─────────────────────────────────────────────────────────────────────────────
-SELECT cron.schedule(
-  'delete-old-audit-logs',
-  '0 3 * * *',
-  $$DELETE FROM public.audit_logs WHERE created_at < NOW() - INTERVAL '3 years'$$
-);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    PERFORM cron.schedule(
+      'delete-old-audit-logs',
+      '0 3 * * *',
+      $job$DELETE FROM public.audit_logs WHERE created_at < NOW() - INTERVAL '3 years'$job$
+    );
+  ELSE
+    RAISE NOTICE 'pg_cron not installed — skipping audit_logs retention job. Enable the extension and re-run to activate 3-year pruning.';
+  END IF;
+END $$;

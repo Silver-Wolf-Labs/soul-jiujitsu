@@ -21,7 +21,18 @@ function makeTheme(
 }
 
 export const THEMES = new Map<string, AppTheme>([
-  // ── 1. Journey (default) ────────────────────────────────────────────────
+  // ── 1. Soul (default) ───────────────────────────────────────────────────
+  // Soul Jiu Jitsu brand — jungle gold, deep green, and terracotta.
+  // Gold mirrors the logo lettering; green/red nod to the golden lion mark.
+  ["soul", makeTheme(
+    "soul",
+    "Soul",
+    "Oro y selva — dorado, verde y terracota",
+    { primary: "#e6b323", info: "#2e7d4f", accent: "#b3402e", warm: "#a96b37", danger: "#dc2626", success: "#16a34a" },
+    "warm",
+  )],
+
+  // ── 2. Journey ──────────────────────────────────────────────────────────
   // BJJ belt progression. Warm, classic, inclusive.
   ["journey", makeTheme(
     "journey",
@@ -31,7 +42,7 @@ export const THEMES = new Map<string, AppTheme>([
     "warm",
   )],
 
-  // ── 2. Neon Cage ────────────────────────────────────────────────────────
+  // ── 3. Neon Cage ────────────────────────────────────────────────────────
   // Dark background + neon accents. MMA fight-night energy. Very masculine.
   ["neon-cage", makeTheme(
     "neon-cage",
@@ -92,4 +103,4 @@ export const THEMES = new Map<string, AppTheme>([
   )],
 ]);
 
-export const DEFAULT_THEME_ID = "journey";
+export const DEFAULT_THEME_ID = "soul";

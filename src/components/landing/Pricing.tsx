@@ -14,9 +14,16 @@ interface Props { sectionConfig?: SectionConfig; }
 
 function formatPeriod(plan: MembershipPlan): string {
   if (plan.period_display) return plan.period_display;
-  if (plan.billing_interval === "month") return "/month";
-  if (plan.billing_interval === "year")  return "/year";
-  return "one time";
+  if (plan.billing_interval === "month") return "/mes";
+  if (plan.billing_interval === "year")  return "/año";
+  return "pago único";
+}
+
+/** ₡ amounts with dot thousand separators — 4000000 cents → "40.000" */
+function formatColones(cents: number): string {
+  return Math.floor(cents / 100)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
 export default async function Pricing({ sectionConfig }: Props) {
@@ -49,15 +56,16 @@ export default async function Pricing({ sectionConfig }: Props) {
   bannerInterval = parseInt(sData?.[0]?.value ?? "10", 10);
 
   return (
-    <section id="pricing" className="py-10 px-5 nav:px-12">
-      <div className="inline-flex items-center gap-2 font-mono text-[13px] tracking-ultra uppercase text-blue-mid border-l-[3px] border-blue-mid pl-2.5 mb-4">
-        {sectionConfig?.display_subtitle ?? "Membership"}
+    <section id="pricing" className="py-14 px-5 nav:px-12">
+      <div className="inline-flex items-center gap-2 font-mono text-[13px] tracking-ultra uppercase text-blue-mid border-l-[3px] border-yellow pl-2.5 mb-4">
+        {sectionConfig?.display_subtitle ?? "Membresías"}
       </div>
-      <h2 className="font-display text-[clamp(50px,6vw,80px)] text-black leading-none mb-2">
-        {sectionConfig?.display_title ?? "Simple Pricing"}
+      <h2 className="text-[clamp(40px,5.5vw,68px)] text-black leading-none mb-2">
+        {sectionConfig?.display_title ?? "Planes"}
       </h2>
-      <p className="text-[15px] text-muted mb-6 max-w-[520px] leading-relaxed">
-        Month-to-month. No contracts. Cancel with 10 days notice.
+      <p className="text-[15px] text-muted mb-6 max-w-[560px] leading-relaxed">
+        Planes mensuales y flexibles, sin contratos. ¿Buscas algo más
+        personalizado? Consulta por clases privadas.
       </p>
 
       <CardScroller
@@ -84,15 +92,15 @@ export default async function Pricing({ sectionConfig }: Props) {
           >
             {showBadge && (
               <div className={`absolute -top-[13px] left-1/2 -translate-x-1/2 text-[10px] font-bold tracking-[0.1em] uppercase px-3.5 py-1 rounded-full whitespace-nowrap ${badgeBgClass} ${badgeTextClass}`}>
-                {plan.highlight_label || "Featured"}
+                {plan.highlight_label || "Destacado"}
               </div>
             )}
             <div className="text-[11px] font-bold tracking-[0.12em] uppercase text-muted mb-4">
               {plan.name}
             </div>
-            <div className="font-display text-[56px] leading-none text-ink">
-              <sup className="text-2xl align-top mt-2.5">$</sup>
-              {Math.floor(plan.price_cents / 100)}
+            <div className="font-display font-soul text-[clamp(34px,2.9vw,44px)] leading-none text-ink whitespace-nowrap">
+              <sup className="text-[0.5em] align-top mr-0.5">₡</sup>
+              {formatColones(plan.price_cents)}
             </div>
             <div className="text-[13px] text-muted mb-6">{formatPeriod(plan)}</div>
             <ul className="mb-7 space-y-0 flex-1">
@@ -107,11 +115,11 @@ export default async function Pricing({ sectionConfig }: Props) {
               href={plan.cta_href}
               className={`mt-auto block text-center py-2.5 rounded text-[12px] font-bold tracking-wider uppercase transition-all duration-150 border ${
                 showBadge
-                  ? "bg-black text-white border-black hover:bg-near-black"
+                  ? "bg-yellow text-black border-yellow hover:bg-yellow-mid"
                   : "bg-white text-ink border-line hover:border-black hover:bg-black hover:text-white"
               }`}
             >
-              Enroll Now
+              {plan.cta_label || "Inscribirme"}
             </a>
           </div>
           );

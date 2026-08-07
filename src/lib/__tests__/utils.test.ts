@@ -11,14 +11,14 @@ import {
 } from "../utils";
 
 describe("formatDate", () => {
-  it("formats an ISO date string", () => {
+  it("formats an ISO date string in Spanish", () => {
     expect(formatDate("2026-03-26")).toContain("2026");
-    expect(formatDate("2026-03-26")).toContain("Mar");
+    expect(formatDate("2026-03-26")).toContain("mar");
   });
 
   it("formats a Date object", () => {
     const d = new Date("2026-01-15");
-    expect(formatDate(d)).toContain("Jan");
+    expect(formatDate(d)).toContain("ene");
   });
 });
 
@@ -33,17 +33,17 @@ describe("formatDateLong", () => {
 
 describe("estimateReadTime", () => {
   it("returns at least 1 min", () => {
-    expect(estimateReadTime("hello world")).toBe("1 min read");
+    expect(estimateReadTime("hello world")).toBe("1 min de lectura");
   });
 
   it("estimates correctly for ~400 words", () => {
     const text = Array(400).fill("word").join(" ");
-    expect(estimateReadTime(text)).toBe("2 min read");
+    expect(estimateReadTime(text)).toBe("2 min de lectura");
   });
 
   it("rounds to nearest minute", () => {
     const text = Array(600).fill("word").join(" ");
-    expect(estimateReadTime(text)).toBe("3 min read");
+    expect(estimateReadTime(text)).toBe("3 min de lectura");
   });
 });
 

@@ -34,27 +34,28 @@ export default function ContactForm() {
 
   return (
     <div ref={containerRef}>
-      <h3 className="font-display text-[36px] text-black mb-1.5">Send Us a Message</h3>
+      <h3 className="font-display text-[32px] text-black mb-1.5">Escríbenos</h3>
       <p className="text-[14px] text-muted mb-7">
-        Questions about classes, pricing, or anything else — we&apos;re friendly, we promise.
+        Dudas sobre clases, planes, clases privadas o cualquier otra cosa —
+        respondemos rápido.
       </p>
 
       {status === "success" ? (
         <div className="bg-success-light border border-success-border rounded-lg p-6 text-center">
           <div className="flex justify-center mb-2"><CheckCircle className="w-8 h-8 text-success" /></div>
-          <p className="text-base font-semibold text-ink mb-1">Message sent!</p>
-          <p className="text-sm text-muted">We&apos;ll get back to you soon.</p>
+          <p className="text-base font-semibold text-ink mb-1">¡Mensaje enviado!</p>
+          <p className="text-sm text-muted">Te responderemos pronto.</p>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-3.5">
           {/* Honeypot — hidden from real users, bots fill it in */}
           <input type="text" name="website" tabIndex={-1} autoComplete="off" style={{ display: "none" }} />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <FormField label="First Name" name="first_name" type="text" placeholder="Rob" required autoComplete="given-name" />
-            <FormField label="Last Name" name="last_name" type="text" placeholder="Ables" required autoComplete="family-name" />
+            <FormField label="Nombre" name="first_name" type="text" placeholder="María" required autoComplete="given-name" />
+            <FormField label="Apellido" name="last_name" type="text" placeholder="Rodríguez" required autoComplete="family-name" />
           </div>
-          <FormField label="Email" name="email" type="email" placeholder="you@email.com" required autoComplete="email" />
-          <FormField label="Message" name="message" multiline placeholder="Ask us anything…" required />
+          <FormField label="Correo" name="email" type="email" placeholder="tu@correo.com" required autoComplete="email" />
+          <FormField label="Mensaje" name="message" multiline placeholder="Cuéntanos en qué te podemos ayudar…" required />
 
           {status === "error" && (
             <p className="text-sm text-danger">{errorMsg}</p>
@@ -66,7 +67,7 @@ export default function ContactForm() {
             disabled={status === "loading"}
             className="w-full nav:w-auto"
           >
-            {status === "loading" ? "Sending…" : "Send Message"}
+            {status === "loading" ? "Enviando…" : "Enviar mensaje"}
           </Button>
         </form>
       )}

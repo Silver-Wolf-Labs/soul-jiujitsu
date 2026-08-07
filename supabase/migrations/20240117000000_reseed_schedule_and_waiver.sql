@@ -1,7 +1,17 @@
 -- ── Re-seed schedule with real Soul JJ schedule ──────────────────────────
+--
+-- The column is `area`, not `mat`: 20240116000000_schedule_mat.sql adds it as
+-- `area` (the file name kept the old word). This INSERT still said `mat`, so on
+-- a fresh database the migration aborted with 42703 and every migration after
+-- it stopped — 13 of 69 applied. It only ever worked on a project where an
+-- older `mat` column happened to survive.
+--
+-- The `schedule` table itself is dropped by 20240122000000_schedule_slots.sql,
+-- so these rows are transient; the point is that the migration must apply
+-- cleanly on the way there.
 TRUNCATE TABLE schedule RESTART IDENTITY CASCADE;
 
-INSERT INTO schedule (day, time, name, type, level, mat, active) VALUES
+INSERT INTO schedule (day, time, name, type, level, area, active) VALUES
 -- Monday
 ('Monday',    '06:00', 'Gi',                'gi',      'All Levels',   NULL,    true),
 ('Monday',    '11:30', 'Open Mat',           'openmat', 'Members Only', NULL,    true),

@@ -30,8 +30,8 @@ async function getLocationData(): Promise<LocationData> {
     email: profile.contact.email,
     hours: [],
     mapEmbed: "",
-    displayTitle: "Location & Contact",
-    displaySubtitle: "Find Us & Reach Out",
+    displayTitle: "Ubicación y contacto",
+    displaySubtitle: "Visítanos",
   };
 
   try {
@@ -77,23 +77,31 @@ export default async function LocationContact() {
   const phoneHref = `tel:${loc.phone.replace(/\D/g, "")}`;
 
   return (
-    <section id="contact" className="py-10 px-5 nav:px-12">
+    <section id="contact" className="py-14 px-5 nav:px-12">
       <SectionHeader tag={loc.displaySubtitle} title={loc.displayTitle} className="mb-6" />
 
       <div className="grid grid-cols-1 nav:grid-cols-2 gap-10 items-start">
         {/* Location pocket */}
         <div className="bg-white border border-line rounded-lg overflow-hidden">
-          {/* Map embed — near-square aspect ratio */}
-          <div className="relative w-full" style={{ paddingBottom: "80%" }}>
-            <iframe
-              src={loc.mapEmbed}
-              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: 0 }}
-              allowFullScreen
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-              title="Gym location"
-            />
-          </div>
+          {/* Map embed — near-square aspect ratio.
+              Rendered only when `contact_map_embed` is set: an <iframe src="">
+              makes the browser re-request the current page into the frame
+              ("An empty string was passed to the src attribute"), which wastes
+              a full page load and shows up as a React hydration error on the
+              landing page. A gym that has not pasted its Maps embed yet should
+              get no map, not a broken one. */}
+          {loc.mapEmbed ? (
+            <div className="relative w-full" style={{ paddingBottom: "80%" }}>
+              <iframe
+                src={loc.mapEmbed}
+                style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: 0 }}
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                title="Ubicación de la academia"
+              />
+            </div>
+          ) : null}
 
           {/* Details */}
           <div className="divide-y divide-line">
@@ -108,27 +116,29 @@ export default async function LocationContact() {
                 <MapPin className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-[11px] text-muted font-semibold tracking-[0.06em] uppercase mb-1">Address</div>
+                <div className="text-[11px] text-muted font-semibold tracking-[0.06em] uppercase mb-1">Dirección</div>
                 <div className="text-[14px] text-ink group-hover:text-blue-mid transition-colors">
                   {loc.address}<br />
                   {loc.city}, {loc.state} {loc.zip}
                 </div>
-                <div className="text-[11px] text-muted mt-1 inline-flex items-center gap-0.5">Tap to get directions <ArrowUpRight className="w-3 h-3" /></div>
+                <div className="text-[11px] text-muted mt-1 inline-flex items-center gap-0.5">Toca para ver cómo llegar <ArrowUpRight className="w-3 h-3" /></div>
               </div>
             </a>
 
-            {/* Phone */}
-            <div className="flex gap-3 items-center px-5 py-3.5">
-              <div className="w-7 h-7 rounded flex items-center justify-center flex-shrink-0 text-muted">
-                <Phone className="w-4 h-4" />
+            {/* Phone — hidden until configured in site_settings */}
+            {loc.phone && (
+              <div className="flex gap-3 items-center px-5 py-3.5">
+                <div className="w-7 h-7 rounded flex items-center justify-center flex-shrink-0 text-muted">
+                  <Phone className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-[11px] text-muted font-semibold tracking-[0.06em] uppercase mb-0.5">Teléfono</div>
+                  <a href={phoneHref} className="text-[14px] text-blue-mid">
+                    {loc.phone}
+                  </a>
+                </div>
               </div>
-              <div>
-                <div className="text-[11px] text-muted font-semibold tracking-[0.06em] uppercase mb-0.5">Phone</div>
-                <a href={phoneHref} className="text-[14px] text-blue-mid">
-                  {loc.phone}
-                </a>
-              </div>
-            </div>
+            )}
 
             {/* Email */}
             <div className="flex gap-3 items-center px-5 py-3.5">
@@ -136,7 +146,7 @@ export default async function LocationContact() {
                 <Mail className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-[11px] text-muted font-semibold tracking-[0.06em] uppercase mb-0.5">Email</div>
+                <div className="text-[11px] text-muted font-semibold tracking-[0.06em] uppercase mb-0.5">Correo</div>
                 <a href={`mailto:${loc.email}`} className="text-[14px] text-blue-mid">
                   {loc.email}
                 </a>
@@ -144,21 +154,23 @@ export default async function LocationContact() {
             </div>
 
             {/* Hours */}
-            <div className="flex gap-3 items-start px-5 py-3.5">
-              <div className="w-7 h-7 rounded flex items-center justify-center flex-shrink-0 mt-0.5 text-muted">
-                <Clock className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-[11px] text-muted font-semibold tracking-[0.06em] uppercase mb-1">Hours</div>
-                <div className="text-[13px] text-muted leading-[1.9]">
-                  {loc.hours.map((h) => (
-                    <span key={h.days} className="block">
-                      <span className="text-ink font-medium">{h.days}:</span> {h.hours}
-                    </span>
-                  ))}
+            {loc.hours.length > 0 && (
+              <div className="flex gap-3 items-start px-5 py-3.5">
+                <div className="w-7 h-7 rounded flex items-center justify-center flex-shrink-0 mt-0.5 text-muted">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-[11px] text-muted font-semibold tracking-[0.06em] uppercase mb-1">Horario</div>
+                  <div className="text-[13px] text-muted leading-[1.9]">
+                    {loc.hours.map((h) => (
+                      <span key={h.days} className="block">
+                        <span className="text-ink font-medium">{h.days}:</span> {h.hours}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 

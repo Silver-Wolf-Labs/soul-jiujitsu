@@ -61,7 +61,7 @@ export const CLASS_TYPE_CONFIG: Record<ClassType, ClassTypeConfig> = {
     borderHex: "var(--color-purple)",
   },
   [ClassType.Youth]: {
-    label: "Youth",
+    label: "Kids",
     borderColor: "border-l-brown",
     bgColor: "bg-brown-card",
     hoverBg: "hover:bg-brown-card-hover",
@@ -77,7 +77,7 @@ export const CLASS_TYPE_CONFIG: Record<ClassType, ClassTypeConfig> = {
     borderHex: "var(--color-near-black)",
   },
   [ClassType.Special]: {
-    label: "Special",
+    label: "Especial",
     borderColor: "border-l-yellow",
     bgColor: "bg-yellow-light",
     hoverBg: "hover:bg-special-card-hover",
@@ -95,19 +95,19 @@ export interface UpdateTagConfig {
 
 export const UPDATE_TAG_CONFIG: Record<UpdateType, UpdateTagConfig> = {
   [UpdateType.Alert]: {
-    label: "⚠ Alert",
+    label: "⚠ Aviso",
     className: "bg-danger-light text-danger border border-danger-border",
   },
   [UpdateType.Event]: {
-    label: "★ Event",
+    label: "★ Evento",
     className: "bg-yellow-light text-yellow-dark border border-yellow-border",
   },
   [UpdateType.Class]: {
-    label: "+ New Class",
+    label: "+ Nueva clase",
     className: "bg-success-light text-success border border-success-border",
   },
   [UpdateType.News]: {
-    label: "News",
+    label: "Noticia",
     className: "bg-blue-light text-blue border border-blue-news",
   },
 };
@@ -191,19 +191,19 @@ export const STRIPE_MAX: Record<BeltColor, number> = {
 
 export const TEAM_TYPE_CONFIG: Record<TeamMemberType, { label: string; className: string }> = {
   [TeamMemberType.Owner]: {
-    label: "Owner",
+    label: "Fundador",
     className: "bg-brown-light text-brown border border-brown",
   },
   [TeamMemberType.HeadCoach]: {
-    label: "Head Coach",
+    label: "Profesor principal",
     className: "bg-purple-light text-purple border border-purple-badge",
   },
   [TeamMemberType.Instructor]: {
-    label: "Instructor",
+    label: "Profesor",
     className: "bg-purple-light text-purple border border-purple-badge",
   },
   [TeamMemberType.Guest]: {
-    label: "Guest",
+    label: "Invitado",
     className: "bg-yellow-light text-yellow-deep border border-yellow-border",
   },
 };
@@ -211,12 +211,12 @@ export const TEAM_TYPE_CONFIG: Record<TeamMemberType, { label: string; className
 // ── Nav links ──────────────────────────────────────────────────────────────
 
 export const NAV_LINKS = [
-  { label: "News", href: "/#updates" },
-  { label: "Schedule", href: "/#schedule" },
-  { label: "Team", href: "/#team" },
-  { label: "Blog", href: "/#blog" },
-  { label: "Pricing", href: "/#pricing" },
-  { label: "Contact", href: "/#contact" },
+  { label: "Nosotros", href: "/#mission" },
+  { label: "Horarios", href: "/#schedule" },
+  { label: "Reglas", href: "/#rules" },
+  { label: "Planes", href: "/#pricing" },
+  { label: "Equipo", href: "/#team" },
+  { label: "Contacto", href: "/#contact" },
 ] as const;
 
 // ── Schedule slot enums ────────────────────────────────────────────────────
@@ -260,36 +260,38 @@ export interface FAQItem {
 
 export const FAQ_ITEMS: FAQItem[] = [
   {
-    question: "What is Brazilian Jiu-Jitsu?",
+    question: "¿Qué es el jiu jitsu brasileño?",
     answer:
-      "A grappling martial art built around control, leverage, and submissions — chokes and joint locks. Think wrestling, but with controlled techniques that can end a fight. Developed from Japanese Jiu-Jitsu by Brazilians in the mid-20th century.",
+      "Un arte marcial de agarre basado en el control, la palanca y las sumisiones — estrangulaciones y luxaciones articulares. No hay golpes: se trata de técnica sobre fuerza, por eso cualquier persona puede practicarlo sin importar tamaño o edad.",
   },
   {
-    question: "Is this like UFC or MMA?",
+    question: "¿Necesito estar en forma para empezar?",
     answer:
-      "BJJ is one of the core parts of MMA, alongside striking and wrestling. In BJJ there's no striking — so no worries. We have coaches with MMA and wrestling backgrounds if you want to go in that direction.",
+      "No. El jiu jitsu te pone en forma como efecto secundario de entrenar. Solo tienes que presentarte — el resto llega solo.",
   },
   {
-    question: "Who are the coaches?",
+    question: "¿Cómo es mi primera clase?",
     answer:
-      "Our coaching staff includes experienced competitors and educators. Check the Team page for full bios.",
+      "Llega con anticipación, preséntate con el profesor y entrena a tu ritmo. Trae ropa deportiva cómoda y una botella de agua. Nadie te va a exigir más de lo que puedes dar el primer día.",
   },
   {
-    question: "Do I need to get in shape first?",
-    answer: "No. BJJ gets you in shape as a side effect of training. Just show up.",
-  },
-  {
-    question: "How does the free trial work?",
+    question: "¿Qué debo llevar?",
     answer:
-      "Come in 5 minutes before any class, sign the waiver, and start training for 7 days. No credit card, no pressure. Then decide if you want to join.",
+      "Para No-Gi: rashguard o camiseta ajustada y short sin bolsillos ni cierres. Para Gi: kimono (si aún no tienes, te ayudamos a conseguir el tuyo). Sandalias para fuera del mat y uñas cortas — es parte de las reglas.",
   },
   {
-    question: "What do I need to bring?",
+    question: "¿Es un espacio seguro para mujeres?",
     answer:
-      "For your trial: a fitted t-shirt and athletic shorts with a drawstring. Optional mouthpiece. Once you join, we'll help you find the right Gi.",
+      "Sí, y es parte central de nuestra misión: un ambiente 100% seguro, inclusivo y respetuoso, donde las mujeres se sientan protegidas, valoradas y empoderadas.",
   },
   {
-    question: "Will I meet Joe Rogan?",
-    answer: "No. But he'd tell you to come train anyway.",
+    question: "¿Tienen clases para niños?",
+    answer:
+      "Sí. Las clases kids son los lunes a las 5:00 p.m. y los sábados a las 9:30 a.m. Formamos disciplina, respeto y confianza desde pequeños.",
+  },
+  {
+    question: "¿Dan clases privadas?",
+    answer:
+      "Sí. Consulta los horarios disponibles directamente con el profesor o escríbenos por el formulario de contacto.",
   },
 ];

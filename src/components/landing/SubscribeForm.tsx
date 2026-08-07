@@ -15,7 +15,7 @@ export default function SubscribeForm({ sectionConfig }: Props) {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
 
-  const title = sectionConfig?.display_title ?? "Stay in the Loop";
+  const title = sectionConfig?.display_title ?? "Mantente al tanto";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,18 +28,19 @@ export default function SubscribeForm({ sectionConfig }: Props) {
       setValue("");
     } else {
       setStatus("error");
-      setErrorMsg(result.error ?? "Something went wrong.");
+      setErrorMsg(result.error ?? "Algo salió mal. Intenta de nuevo.");
     }
   }
 
   return (
-    <section id="subscribe" className="bg-black py-10 px-5 nav:px-12">
-      <div className="max-w-[600px] mx-auto text-center">
-        <h2 className="font-display text-[clamp(50px,6vw,80px)] text-white mb-3">
+    <section id="subscribe" className="bg-soul-dark py-16 nav:py-20 px-5 nav:px-12">
+      <div className="max-w-[620px] mx-auto text-center">
+        <h2 className="text-[clamp(38px,5vw,60px)] text-off-white mb-3">
           {title}
         </h2>
         <p className="text-[15px] text-white/50 mb-9">
-          Class cancellations, events, seminars, and news — delivered directly to you.
+          Cambios de horario, eventos, seminarios y noticias de la academia —
+          directo a tu correo o teléfono.
         </p>
 
         {/* Email / SMS tabs */}
@@ -52,15 +53,16 @@ export default function SubscribeForm({ sectionConfig }: Props) {
                 mode === m ? "bg-yellow text-black" : "bg-transparent text-white/50 hover:text-white"
               }`}
             >
-              {m === "email" ? "Email" : "Text / SMS"}
+              {m === "email" ? "Correo" : "SMS"}
             </button>
           ))}
         </div>
 
         {status === "success" ? (
           <div className="text-white/70 py-4">
-            <CheckCircle className="inline w-4 h-4 text-success mr-1 align-text-bottom" /> Subscribed! We&apos;ll send {mode === "sms" ? "texts" : "emails"} to{" "}
-            <strong className="text-white">{value || "you"}</strong>.
+            <CheckCircle className="inline w-4 h-4 text-success mr-1 align-text-bottom" /> ¡Listo! Te enviaremos{" "}
+            {mode === "sms" ? "mensajes" : "correos"} a{" "}
+            <strong className="text-white">{value || "tu contacto"}</strong>.
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2.5">
@@ -75,7 +77,7 @@ export default function SubscribeForm({ sectionConfig }: Props) {
               style={{ display: "none" }}
             />
             <label htmlFor="subscribe-input" className="sr-only">
-              {mode === "sms" ? "Phone number" : "Email address"}
+              {mode === "sms" ? "Número de teléfono" : "Correo electrónico"}
             </label>
             <input
               id="subscribe-input"
@@ -83,17 +85,17 @@ export default function SubscribeForm({ sectionConfig }: Props) {
               type={mode === "sms" ? "tel" : "email"}
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              placeholder={mode === "sms" ? "(214) 555-0100" : "your@email.com"}
+              placeholder={mode === "sms" ? "8888 8888" : "tu@correo.com"}
               required
               autoComplete={mode === "sms" ? "tel" : "email"}
-              className="flex-1 bg-white/[0.06] border border-white/12 text-white placeholder-white/30 px-4 py-2.5 rounded text-sm font-body outline-none focus:border-yellow focus:ring-2 focus:ring-yellow/12 transition-colors duration-150"
+              className="flex-1 bg-white/[0.06] border border-white/15 text-white placeholder-white/30 px-4 py-2.5 rounded text-sm font-body outline-none focus:border-yellow focus:ring-2 focus:ring-[#e6b323]/25 transition-colors duration-150"
             />
             <Button
               variant="yellow"
               type="submit"
               disabled={status === "loading"}
             >
-              {status === "loading" ? "…" : "Subscribe"}
+              {status === "loading" ? "…" : "Suscribirme"}
             </Button>
           </form>
         )}
@@ -103,7 +105,7 @@ export default function SubscribeForm({ sectionConfig }: Props) {
         )}
 
         <p className="text-xs text-white/30 mt-4">
-          No spam. Unsubscribe anytime. We only send real updates.
+          Sin spam. Cancela cuando quieras. Solo enviamos avisos reales.
         </p>
       </div>
     </section>

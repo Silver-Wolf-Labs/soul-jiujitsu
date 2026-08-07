@@ -46,4 +46,4 @@ email.
 
 ## 8. Contact
 
-legal@TODO_DOMAIN
+legal@silverwolflabs.com

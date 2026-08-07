@@ -13,56 +13,56 @@ import type { BlogPost } from "@/lib/supabase/types";
 const FALLBACK_POSTS: BlogPost[] = [
   {
     id: 1,
-    title: "Why the Guillotine is the Most Underrated Submission in No-Gi",
-    slug: "guillotine-submission",
-    body: "## The High Elbow Guillotine\n\nRob breaks down the high elbow guillotine — how to set it up off a failed double leg, why most people squeeze wrong, and three grip variations to drill this week.\n\n### Setup Off the Failed Double Leg\n\nMost guillotines are caught opportunistically. But the *best* ones are set up deliberately from a failed shot.\n\n### Why Most People Squeeze Wrong\n\nThe common mistake is squeezing with the bicep. The correct mechanic uses the forearm blade against the carotid.\n\n### Three Grip Variations\n\n1. **Standard grip** — for beginners\n2. **High elbow** — for tighter necks\n3. **Arm-in** — the highest percentage finish",
-    tag: "Technique",
-    author: "Rob Ables",
-    excerpt: "Rob breaks down the high elbow guillotine.",
+    title: "Cómo sobrevivir a tu primera semana de jiu jitsu",
+    slug: "primera-semana",
+    body: "## Bienvenido al tatami\n\nTodos los cinturones negros fueron alguna vez cinturones blancos que sobrevivieron a su primera semana.\n\n### Preséntate con constancia\n\nLa mitad del camino es simplemente llegar. Dos o tres clases por semana son suficientes para empezar.\n\n### Tapea temprano, tapea seguido\n\nTapear no es perder: es aprender sin lesionarte. El ego se queda fuera del mat.\n\n### Pregunta todo\n\nLos profesores y compañeros están para ayudarte. Nadie espera que sepas nada el primer día.",
+    tag: "Beginner",
+    author: "Soul",
+    excerpt: "Todos los cinturones negros sobrevivieron a su primera semana.",
     published: true,
-    created_at: "2026-03-20",
+    created_at: "2026-08-01",
     starts_at: null,
     expires_at: null,
     display_order: 0,
   },
   {
     id: 2,
-    title: "3 Things We Learned from the Texas Open",
-    slug: "texas-open-recap",
-    body: "## Competition Day Lessons\n\nThree Soul JJ competitors medaled at the Texas Open last weekend.\n\n### 1. Conditioning Wins Matches\n\n### 2. Trust Your A-Game\n\n### 3. Competition Exposes Weaknesses Early",
-    tag: "Competition",
-    author: "Rob Ables",
-    excerpt: "Three Soul JJ competitors medaled at the Texas Open.",
+    title: "¿Gi o No-Gi? Por cuál empezar",
+    slug: "gi-o-nogi",
+    body: "## El clásico debate\n\nTodos los alumnos nuevos preguntan: *¿Gi o No-Gi?*\n\n### Entrena Gi si...\n\nTe interesa el jiu jitsu tradicional, los agarres de kimono y un ritmo más técnico.\n\n### Entrena No-Gi si...\n\nPrefieres un ritmo más dinámico, sin agarres de tela.\n\n### La mejor respuesta: entrena ambos\n\nEn Soul tenemos clases de Gi y No-Gi cada semana — combina las dos y tu juego crecerá más rápido.",
+    tag: "Beginner",
+    author: "Soul",
+    excerpt: "El clásico debate, explicado para quienes empiezan.",
     published: true,
-    created_at: "2026-03-18",
+    created_at: "2026-07-20",
     starts_at: null,
     expires_at: null,
     display_order: 0,
   },
   {
     id: 3,
-    title: "How to Survive Your First Week of BJJ Without Dying",
-    slug: "first-week-bjj",
-    body: "## Welcome to the Mats\n\nEvery black belt was once a white belt who survived their first week.\n\n### Show Up Consistently\n\n### Tap Early, Tap Often\n\n### Ask Questions",
-    tag: "Beginner",
-    author: "Rob Ables",
-    excerpt: "Every black belt survived their first week.",
+    title: "Por qué el jiu jitsu es para todos",
+    slug: "jiu-jitsu-para-todos",
+    body: "## El arte suave\n\nEl jiu jitsu se basa en la técnica y la palanca, no en la fuerza. Por eso pueden practicarlo personas de cualquier tamaño, edad y condición física.\n\n### Un espacio seguro\n\nEn Soul trabajamos para que todos — y especialmente las mujeres — entrenen con total seguridad, confianza y motivación.",
+    tag: "News",
+    author: "Soul",
+    excerpt: "Técnica sobre fuerza: el arte suave no distingue tamaño ni edad.",
     published: true,
-    created_at: "2026-03-10",
+    created_at: "2026-07-10",
     starts_at: null,
     expires_at: null,
     display_order: 0,
   },
   {
     id: 4,
-    title: "Gi vs No-Gi: Which Should You Train First?",
-    slug: "gi-vs-nogi",
-    body: "## The Classic Debate\n\nNew students always ask: *Gi or No-Gi?*\n\n### Train Gi If...\n\n### Train No-Gi If...\n\n### The Best Answer: Train Both",
-    tag: "Beginner",
-    author: "Rob Ables",
-    excerpt: "We break down the classic debate for new students.",
+    title: "La importancia del open mat",
+    slug: "open-mat",
+    body: "## Rodar libre\n\nEl open mat es el espacio donde la técnica se vuelve instinto: sin clase estructurada, solo tatami y compañeros.\n\n### En Soul\n\nViernes 7:00 p.m. (Gi) y sábados 12:00 m.d. (No-Gi). Llega, salúdate con todos y a rodar.",
+    tag: "Technique",
+    author: "Soul",
+    excerpt: "Rodar libre es donde la técnica se vuelve instinto.",
     published: true,
-    created_at: "2026-02-28",
+    created_at: "2026-07-01",
     starts_at: null,
     expires_at: null,
     display_order: 0,
@@ -105,7 +105,7 @@ export default async function BlogPostPage({
             href="/#blog"
             className="inline-flex items-center gap-2 text-[13px] text-muted hover:text-ink transition-colors font-medium"
           >
-            <ArrowLeft className="w-4 h-4" />Back to Blog
+            <ArrowLeft className="w-4 h-4" />Volver al blog
           </Link>
         </div>
 
@@ -124,7 +124,7 @@ export default async function BlogPostPage({
 
             {/* Meta */}
             <div className="flex flex-wrap gap-4 text-sm text-muted font-mono mb-10 pb-10 border-b border-line">
-              <span>By {post.author}</span>
+              <span>Por {post.author}</span>
               <span>{formatDate(post.created_at)}</span>
               <span>{estimateReadTime(post.body)}</span>
             </div>

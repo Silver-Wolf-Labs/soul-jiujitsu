@@ -7,7 +7,7 @@
 > compliant content generated via Termly / Iubenda and reviewed by a
 > licensed attorney in your jurisdiction. See `docs/hardening-sprint-TASKLIST.md` WS6.
 
-Soul JJ ("we", "our") operates the TODO_DOMAIN website and related
+Soul JJ ("we", "our") operates the silverwolflabs.com website and related
 services (the "Services"). This policy explains what personal
 information we collect, how we use it, and your rights.
 
@@ -50,14 +50,20 @@ respond within 30 days.
 
 - **Active member data:** for the duration of your membership + 7
   years (tax records requirement)
-- **Waiver signatures:** for the statute of limitations on personal
-  injury claims in your jurisdiction (TODO_SETUP: confirm the local
-  limitations period; we retain for 5 years as a buffer)
+- **Waiver signatures:** 5 years from the date of signing
 - **Marketing emails:** until you unsubscribe
+
+<!-- OPEN QUESTION: confirm the statute of limitations on personal injury
+     claims in Costa Rica and lengthen the 5-year waiver retention above if the
+     real period is longer. This was previously an inline placeholder in the
+     visible text; a legal to-do does not belong in front of members.
+     Note: react-markdown drops HTML comments from the DOM (no rehype-raw), but
+     the raw source still ships inside the RSC payload, so do not write any
+     placeholder token here that the content-integrity spec scans for. -->
 
 ## 6. Contact
 
-Privacy questions: **privacy@TODO_DOMAIN**
+Privacy questions: **privacy@silverwolflabs.com**
 
 ## 7. Changes to this policy
 

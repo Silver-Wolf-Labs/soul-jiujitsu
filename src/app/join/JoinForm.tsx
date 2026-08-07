@@ -97,12 +97,12 @@ function InlineSignaturePad({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={confirmedDataUrl}
-            alt="Your drawn signature"
+            alt="Tu firma"
             className="w-full h-auto block"
           />
           <div className="absolute inset-0 flex items-end justify-end p-2 pointer-events-none">
             <span className="text-xs text-success font-medium bg-white/80 px-1.5 py-0.5 rounded">
-              ✓ Signed
+              ✓ Firmado
             </span>
           </div>
         </div>
@@ -115,7 +115,7 @@ function InlineSignaturePad({
           />
           {isEmpty && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
-              <p className="text-line text-sm">Sign here with your finger or mouse</p>
+              <p className="text-line text-sm">Firma aquí con tu dedo o el mouse</p>
             </div>
           )}
         </div>
@@ -127,7 +127,7 @@ function InlineSignaturePad({
           onClick={handleClear}
           className="text-muted hover:text-ink underline"
         >
-          Clear
+          Borrar
         </button>
         <button
           type="button"
@@ -142,12 +142,12 @@ function InlineSignaturePad({
               strokeLinecap="round" strokeLinejoin="round"
             />
           </svg>
-          Full screen
+          Pantalla completa
         </button>
       </div>
       <p className="text-xs text-muted">
-        Tip: tap <strong className="font-medium text-ink">Full screen</strong> for
-        a bigger signing area &mdash; especially helpful on phones.
+        Consejo: toca <strong className="font-medium text-ink">Pantalla completa</strong> para
+        un área de firma más grande &mdash; ideal en el teléfono.
       </p>
     </div>
   );
@@ -211,13 +211,13 @@ export default function JoinForm({ waiverTemplate }: Props) {
     e.preventDefault();
     setError("");
     if (!form.first_name.trim() || !form.last_name.trim() || !form.email.trim()) {
-      setError("Please fill in all required fields.");
+      setError("Completa todos los campos requeridos.");
       return;
     }
-    if (!form.password) { setError("Please enter a password."); return; }
-    if (form.password !== form.confirm_password) { setError("Passwords do not match."); return; }
+    if (!form.password) { setError("Escribe una contraseña."); return; }
+    if (form.password !== form.confirm_password) { setError("Las contraseñas no coinciden."); return; }
     if (form.password.length < 10) {
-      setError("Password must be at least 10 characters. Longer passwords are stronger than shorter ones with special characters.");
+      setError("La contraseña debe tener al menos 10 caracteres. Una contraseña larga es más fuerte que una corta con símbolos.");
       return;
     }
 
@@ -242,11 +242,11 @@ export default function JoinForm({ waiverTemplate }: Props) {
   function handleNextFromWaiver() {
     setError("");
     if (!waiverAgreed) {
-      setError("You must agree to the waiver to continue.");
+      setError("Debes aceptar el consentimiento para continuar.");
       return;
     }
     if (!waiverSignature) {
-      setError("Please draw your signature above to continue.");
+      setError("Dibuja tu firma arriba para continuar.");
       return;
     }
     setStep(3);
@@ -307,13 +307,13 @@ export default function JoinForm({ waiverTemplate }: Props) {
     // they filled the form wrong.
     if (!authData.user) {
       setLoading(false);
-      setError("Unable to create account. Please try again.");
+      setError("No se pudo crear la cuenta. Intenta de nuevo.");
       return;
     }
     if (authData.user.identities && authData.user.identities.length === 0) {
       setLoading(false);
       setError(
-        `An account with ${form.email} already exists. Log in or reset your password instead.`
+        `Ya existe una cuenta con ${form.email}. Inicia sesión o restablece tu contraseña.`
       );
       return;
     }
@@ -378,22 +378,22 @@ export default function JoinForm({ waiverTemplate }: Props) {
             <h1 className="font-display text-3xl text-black tracking-wider">
               {profile.logoText} &bull; {profile.cityName.toUpperCase()}
             </h1>
-            <p className="text-sm text-muted mt-1">Start your journey</p>
+            <p className="text-sm text-muted mt-1">Comienza tu camino</p>
           </div>
 
           {/* Step indicator */}
-          <p className="text-xs text-muted text-center mb-6">Step {step} of {totalSteps}</p>
+          <p className="text-xs text-muted text-center mb-6">Paso {step} de {totalSteps}</p>
 
           {/* ── Step 1: Personal info + Password ── */}
           {step === 1 && (
             <form onSubmit={handleNextFromStep1} noValidate>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                 <div>
-                  <label className={labelClass} htmlFor="first_name">First Name <span className="text-danger">*</span></label>
+                  <label className={labelClass} htmlFor="first_name">Nombre <span className="text-danger">*</span></label>
                   <input id="first_name" name="first_name" type="text" required value={form.first_name} onChange={handleChange} className={inputClass} autoComplete="given-name" />
                 </div>
                 <div>
-                  <label className={labelClass} htmlFor="last_name">Last Name <span className="text-danger">*</span></label>
+                  <label className={labelClass} htmlFor="last_name">Apellido <span className="text-danger">*</span></label>
                   <input id="last_name" name="last_name" type="text" required value={form.last_name} onChange={handleChange} className={inputClass} autoComplete="family-name" />
                 </div>
               </div>
@@ -403,57 +403,57 @@ export default function JoinForm({ waiverTemplate }: Props) {
                   phone takes 1/3 so the row still looks balanced. */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
                 <div className="sm:col-span-2">
-                  <label className={labelClass} htmlFor="email">Email <span className="text-danger">*</span></label>
+                  <label className={labelClass} htmlFor="email">Correo <span className="text-danger">*</span></label>
                   <input id="email" name="email" type="email" required value={form.email} onChange={handleChange} className={inputClass} autoComplete="email" />
                 </div>
                 <div>
-                  <label className={labelClass} htmlFor="phone">Phone</label>
+                  <label className={labelClass} htmlFor="phone">Teléfono</label>
                   <input id="phone" name="phone" type="tel" value={form.phone} onChange={handleChange} className={inputClass} autoComplete="tel" />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
                 <div>
-                  <label className={labelClass} htmlFor="birth_month">Born</label>
+                  <label className={labelClass} htmlFor="birth_month">Nacimiento</label>
                   <select id="birth_month" name="birth_month" value={form.birth_month} onChange={handleChange} className={inputClass}>
-                    <option value="">Month</option>
+                    <option value="">Mes</option>
                     {Array.from({ length: 12 }, (_, i) => (
                       <option key={i + 1} value={i + 1}>
-                        {new Date(2000, i).toLocaleString("en-US", { month: "short" })}
+                        {new Date(2000, i).toLocaleString("es-CR", { month: "short" })}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className={labelClass} htmlFor="birth_year">Birth Year</label>
-                  <input id="birth_year" name="birth_year" type="number" min="1900" max={new Date().getFullYear()} placeholder="YYYY" value={form.birth_year} onChange={handleChange} className={inputClass} />
+                  <label className={labelClass} htmlFor="birth_year">Año de nacimiento</label>
+                  <input id="birth_year" name="birth_year" type="number" min="1900" max={new Date().getFullYear()} placeholder="AAAA" value={form.birth_year} onChange={handleChange} className={inputClass} />
                 </div>
                 <div>
-                  <label className={labelClass} htmlFor="gender">Gender</label>
+                  <label className={labelClass} htmlFor="gender">Género</label>
                   <select id="gender" name="gender" value={form.gender} onChange={handleChange} className={inputClass}>
-                    <option value="">Select…</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
-                    <option value="prefer_not_to_say">Prefer not to say</option>
+                    <option value="">Selecciona…</option>
+                    <option value="male">Masculino</option>
+                    <option value="female">Femenino</option>
+                    <option value="other">Otro</option>
+                    <option value="prefer_not_to_say">Prefiero no decir</option>
                   </select>
                 </div>
               </div>
 
-              <p className="text-xs font-semibold text-muted uppercase tracking-wide mb-2 mt-5">Emergency Contact</p>
+              <p className="text-xs font-semibold text-muted uppercase tracking-wide mb-2 mt-5">Contacto de emergencia</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                 <div>
-                  <label className={labelClass} htmlFor="emergency_contact_name">Name</label>
+                  <label className={labelClass} htmlFor="emergency_contact_name">Nombre</label>
                   <input id="emergency_contact_name" name="emergency_contact_name" type="text" value={form.emergency_contact_name} onChange={handleChange} className={inputClass} />
                 </div>
                 <div>
-                  <label className={labelClass} htmlFor="emergency_contact_phone">Phone</label>
+                  <label className={labelClass} htmlFor="emergency_contact_phone">Teléfono</label>
                   <input id="emergency_contact_phone" name="emergency_contact_phone" type="tel" value={form.emergency_contact_phone} onChange={handleChange} className={inputClass} />
                 </div>
               </div>
 
               <div className="mb-5">
-                <label className={labelClass} htmlFor="emergency_contact_relationship">Relationship</label>
+                <label className={labelClass} htmlFor="emergency_contact_relationship">Parentesco</label>
                 <select
                   id="emergency_contact_relationship"
                   name="emergency_contact_relationship"
@@ -461,30 +461,30 @@ export default function JoinForm({ waiverTemplate }: Props) {
                   onChange={handleChange}
                   className={inputClass}
                 >
-                  <option value="">Select…</option>
-                  <option value="spouse">Spouse</option>
-                  <option value="partner">Partner</option>
-                  <option value="parent">Parent</option>
-                  <option value="sibling">Sibling</option>
-                  <option value="child">Child</option>
-                  <option value="friend">Friend</option>
-                  <option value="colleague">Colleague</option>
-                  <option value="other">Other</option>
+                  <option value="">Selecciona…</option>
+                  <option value="spouse">Cónyuge</option>
+                  <option value="partner">Pareja</option>
+                  <option value="parent">Padre / madre</option>
+                  <option value="sibling">Hermano/a</option>
+                  <option value="child">Hijo/a</option>
+                  <option value="friend">Amistad</option>
+                  <option value="colleague">Colega</option>
+                  <option value="other">Otro</option>
                 </select>
               </div>
 
               <label className="flex items-start gap-2 mb-5 cursor-pointer">
                 <input name="communication_opt_in" type="checkbox" checked={form.communication_opt_in} onChange={handleChange} className="mt-0.5 shrink-0" />
-                <span className="text-xs text-ink leading-snug">I agree to receive updates and class reminders</span>
+                <span className="text-xs text-ink leading-snug">Quiero recibir avisos y recordatorios de clases</span>
               </label>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                 <div>
-                  <label className={labelClass} htmlFor="password">Password <span className="text-danger">*</span></label>
+                  <label className={labelClass} htmlFor="password">Contraseña <span className="text-danger">*</span></label>
                   <input id="password" name="password" type="password" required value={form.password} onChange={handleChange} className={inputClass} autoComplete="new-password" />
                 </div>
                 <div>
-                  <label className={labelClass} htmlFor="confirm_password">Confirm Password <span className="text-danger">*</span></label>
+                  <label className={labelClass} htmlFor="confirm_password">Confirmar contraseña <span className="text-danger">*</span></label>
                   <input id="confirm_password" name="confirm_password" type="password" required value={form.confirm_password} onChange={handleChange} className={inputClass} autoComplete="new-password" />
                 </div>
               </div>
@@ -514,10 +514,10 @@ export default function JoinForm({ waiverTemplate }: Props) {
                 );
                 return (
                   <div className="mb-6 space-y-0.5">
-                    <Req met={longEnough} label="At least 10 characters" />
-                    <Req met={matches} label="Passwords match" />
+                    <Req met={longEnough} label="Mínimo 10 caracteres" />
+                    <Req met={matches} label="Las contraseñas coinciden" />
                     <p className="text-[10px] text-muted/70 mt-2 italic">
-                      Tip: a memorable three-word passphrase beats a short cryptic password.
+                      Consejo: una frase de tres palabras fáciles de recordar es más segura que una contraseña corta y críptica.
                     </p>
                   </div>
                 );
@@ -536,13 +536,13 @@ export default function JoinForm({ waiverTemplate }: Props) {
                   required
                 />
                 <span className="text-xs text-muted leading-relaxed">
-                  I agree to the{" "}
+                  Acepto los{" "}
                   <a href="/terms" target="_blank" rel="noopener" className="underline underline-offset-2 hover:text-ink">
-                    Terms of Service
+                    Términos de servicio
                   </a>{" "}
-                  and{" "}
+                  y la{" "}
                   <a href="/privacy" target="_blank" rel="noopener" className="underline underline-offset-2 hover:text-ink">
-                    Privacy Policy
+                    Política de privacidad
                   </a>
                   .
                 </span>
@@ -559,7 +559,7 @@ export default function JoinForm({ waiverTemplate }: Props) {
                 }
                 className={btnClass}
               >
-                Next
+                Siguiente
               </button>
             </form>
           )}
@@ -571,7 +571,7 @@ export default function JoinForm({ waiverTemplate }: Props) {
                 {waiverTemplate.title}
               </p>
               <p className="text-xs text-muted mb-3">
-                Version {waiverTemplate.version} — Scroll to the bottom and read the full document before signing.
+                Versión {waiverTemplate.version} — Desplázate hasta el final y lee el documento completo antes de firmar.
               </p>
 
               <div
@@ -590,9 +590,9 @@ export default function JoinForm({ waiverTemplate }: Props) {
                   className="mt-0.5 w-4 h-4 rounded border-line accent-black flex-shrink-0"
                 />
                 <span className="text-sm text-ink">
-                  I have read and agree to the terms above
+                  Leí y acepto los términos anteriores
                   {!hasScrolledWaiver && (
-                    <span className="block text-xs text-muted mt-0.5">Scroll to the bottom to enable</span>
+                    <span className="block text-xs text-muted mt-0.5">Desplázate hasta el final para habilitar</span>
                   )}
                 </span>
               </label>
@@ -603,10 +603,10 @@ export default function JoinForm({ waiverTemplate }: Props) {
                   shown back on the profile page. */}
               {waiverAgreed && (
                 <div className="mb-5">
-                  <label className={labelClass}>Your Signature <span className="text-danger">*</span></label>
+                  <label className={labelClass}>Tu firma <span className="text-danger">*</span></label>
                   <InlineSignaturePad onData={setWaiverSignature} />
                   <p className="text-xs text-muted mt-1">
-                    Sign using your finger or mouse. You can clear and retry.
+                    Firma con tu dedo o el mouse. Puedes borrar e intentar de nuevo.
                   </p>
                 </div>
               )}
@@ -619,7 +619,7 @@ export default function JoinForm({ waiverTemplate }: Props) {
                 onClick={handleNextFromWaiver}
                 className={btnClass}
               >
-                Next
+                Siguiente
               </button>
 
               <button
@@ -627,7 +627,7 @@ export default function JoinForm({ waiverTemplate }: Props) {
                 onClick={() => { setError(""); setStep(1); }}
                 className="mt-3 w-full text-sm text-muted hover:text-ink text-center inline-flex items-center justify-center gap-1"
               >
-                <ArrowLeft className="w-3.5 h-3.5" />Back
+                <ArrowLeft className="w-3.5 h-3.5" />Volver
               </button>
             </div>
           )}
@@ -639,24 +639,24 @@ export default function JoinForm({ waiverTemplate }: Props) {
                   before the training form so the skip feels intentional. */}
               {!waiverTemplate && !noWaiverAcknowledged && (
                 <div className="mb-6 rounded-lg border border-line bg-off-white p-4 text-sm text-ink">
-                  <p className="font-semibold mb-1">No waiver required at this time</p>
+                  <p className="font-semibold mb-1">No se requiere consentimiento por ahora</p>
                   <p className="text-muted text-xs leading-relaxed">
-                    No waiver is required at this time. Your gym may ask you to sign one later —
-                    you&apos;ll see a notice in your member portal when that happens.
+                    Por el momento no hay un consentimiento activo. La academia puede pedirte
+                    firmar uno más adelante &mdash; verás un aviso en tu portal cuando eso pase.
                   </p>
                   <button
                     type="button"
                     onClick={() => setNoWaiverAcknowledged(true)}
                     className="mt-3 px-4 py-1.5 bg-black text-white text-xs font-semibold rounded hover:bg-near-black"
                   >
-                    Got it, continue
+                    Entendido, continuar
                   </button>
                 </div>
               )}
 
               {(waiverTemplate || noWaiverAcknowledged) && (<>
               <BeltEditor
-                description="Optional — helps us track your progress and promotions."
+                description="Opcional — nos ayuda a llevar tu progreso y tus promociones."
                 value={{
                   belt: form.belt,
                   stripes: form.stripes,
@@ -683,7 +683,7 @@ export default function JoinForm({ waiverTemplate }: Props) {
                 className={btnClass}
               >
                 {loading || redirecting
-                  ? <SpinnerButton label={redirecting ? "Redirecting" : "Joining"} />
+                  ? <SpinnerButton label={redirecting ? "Redirigiendo" : "Creando cuenta"} />
                   : profile.joinButtonText}
               </button>
               <button
@@ -692,7 +692,7 @@ export default function JoinForm({ waiverTemplate }: Props) {
                 onClick={() => handleSubmit(true)}
                 className="mt-3 w-full text-sm text-muted hover:text-ink text-center disabled:opacity-50"
               >
-                Skip for now
+                Omitir por ahora
               </button>
 
               <button
@@ -704,7 +704,7 @@ export default function JoinForm({ waiverTemplate }: Props) {
                 }}
                 className="mt-2 w-full text-sm text-muted hover:text-ink text-center inline-flex items-center justify-center gap-1 disabled:opacity-50"
               >
-                <ArrowLeft className="w-3.5 h-3.5" />Back
+                <ArrowLeft className="w-3.5 h-3.5" />Volver
               </button>
               </>)}
             </div>
@@ -712,9 +712,9 @@ export default function JoinForm({ waiverTemplate }: Props) {
 
           {/* Footer */}
           <p className="mt-6 text-center text-xs text-muted">
-            Already a member?{" "}
+            ¿Ya eres miembro?{" "}
             <Link href="/portal/login" className="text-ink font-semibold hover:underline">
-              Sign in
+              Inicia sesión
             </Link>
           </p>
         </div>

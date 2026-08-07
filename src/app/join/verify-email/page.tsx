@@ -7,7 +7,7 @@ interface Props {
 
 export default async function VerifyEmailPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const email = sp.email ?? "your inbox";
+  const email = sp.email ?? "tu correo";
 
   return (
     <div className="min-h-screen bg-off-white flex flex-col items-center justify-start py-16 px-4">
@@ -23,29 +23,29 @@ export default async function VerifyEmailPage({ searchParams }: Props) {
           </div>
 
           <h1 className="font-display text-2xl text-black tracking-wide mb-2">
-            Check your email
+            Revisa tu correo
           </h1>
           <p className="text-sm text-muted mb-4">
-            We sent a verification link to{" "}
+            Enviamos un enlace de verificación a{" "}
             {sp.email ? (
               <span className="font-semibold text-ink">{email}</span>
             ) : (
-              "your email address"
+              "tu correo electrónico"
             )}
             .
           </p>
           <p className="text-sm text-muted mb-8">
-            Click the link in the email to activate your account. Once confirmed
-            you can sign in and access your member portal.
+            Haz clic en el enlace del correo para activar tu cuenta. Una vez
+            confirmada podrás iniciar sesión y entrar a tu portal de miembro.
           </p>
 
           <div className="border-t border-line pt-6 space-y-3">
-            <p className="text-xs text-muted">Already confirmed?</p>
+            <p className="text-xs text-muted">¿Ya confirmaste?</p>
             <Link
               href="/portal/login"
               className="block w-full py-2.5 bg-black text-white rounded font-semibold text-sm hover:bg-near-black transition-colors text-center"
             >
-              Sign In
+              Iniciar sesión
             </Link>
           </div>
         </div>

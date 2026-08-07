@@ -1,0 +1,529 @@
+name: Nightly UI tests
+
+# Runs the Playwright UI suite every night and reports the result three ways:
+#   1. GitHub Step Summary on the run page (read this first)
+#   2. A dashboard on GitHub Pages with 60 nights of history
+#   3. A tracking issue, opened on failure and closed automatically on recovery
+#
+# Manual runs are supported via workflow_dispatch, including pointing the suite
+# at a deployed URL instead of a CI-built server.
+
+on:
+  schedule:
+    # 08:00 UTC = 02:00 America/Chicago (CST) / 03:00 (CDT). Chosen so the run
+    # finishes before the gym opens and before either maintainer starts work,
+    # and so it does not collide with the 03:00 UTC Vercel cron in vercel.json.
+    #
+    # GitHub does not adjust for DST, so this drifts by an hour twice a year.
+    # That is fine for a nightly; it is not fine to schedule on the hour, which
+    # is the most contended slot on GitHub's shared runners — hence :00 avoided
+    # in favour of a quieter minute below.
+    - cron: "7 8 * * *"
+
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Test a deployed URL instead of building here (e.g. https://soul-jiujitsu.example.com). Leave blank to build in CI."
+        required: false
+        type: string
+      visual:
+        description: "Include visual regression tests (needs committed Linux baselines)"
+        required: false
+        type: boolean
+        default: false
+      grep:
+        description: "Only run tests matching this pattern (Playwright --grep)"
+        required: false
+        type: string
+
+# Never run two nightlies at once — they would fight over the same Pages
+# deployment and produce interleaved history entries. A manual run started while
+# the scheduled one is going waits rather than cancelling it, so we never lose a
+# night's signal.
+concurrency:
+  group: nightly-ui-tests
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # ── 1. Run the suite ─────────────────────────────────────────────────────
+  test:
+    name: Playwright UI suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    outputs:
+      outcome: ${{ steps.playwright.outcome }}
+      failed_count: ${{ steps.parse.outputs.failed_count }}
+      passed_count: ${{ steps.parse.outputs.passed_count }}
+      summary_headline: ${{ steps.parse.outputs.headline }}
+
+    env:
+      # Supabase project the suite runs against. Point these at a STAGING
+      # project — the authenticated specs sign in as a real user, and the admin
+      # crawl reads real tables. See e2e/README.md.
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}
+      # Optional. Absent Stripe keys only disable billing features; the suite
+      # accounts for that rather than failing.
+      STRIPE_SECRET_KEY: ${{ secrets.E2E_STRIPE_SECRET_KEY }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.E2E_STRIPE_WEBHOOK_SECRET }}
+      SUPER_ADMIN_PASSWORD: ${{ secrets.E2E_SUPER_ADMIN_PASSWORD }}
+
+      # Test credentials. Each authenticated suite skips itself when its
+      # credentials are missing, so the workflow is green-and-honest before a
+      # staging account exists — the report lists what was skipped.
+      E2E_MEMBER_EMAIL: ${{ secrets.E2E_MEMBER_EMAIL }}
+      E2E_MEMBER_PASSWORD: ${{ secrets.E2E_MEMBER_PASSWORD }}
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_KIOSK_PIN: ${{ secrets.E2E_KIOSK_PIN }}
+
+      # Blank for a CI-built server; set by workflow_dispatch to test a deploy.
+      E2E_BASE_URL: ${{ inputs.base_url }}
+      E2E_VISUAL: ${{ inputs.visual && '1' || '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 22+ for the same reason as ci.yml: Vitest 4 needs `styleText` from
+          # node:util, and the rolldown native binding only installs on 22+.
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Cache the browser binaries — they are ~400 MB and the download is the
+      # single slowest step in the job. Keyed on the Playwright version so a
+      # dependency bump fetches fresh binaries instead of using stale ones.
+      - name: Resolve Playwright version
+        id: pw-version
+        run: |
+          version=$(node -p "require('@playwright/test/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+
+      - name: Install Playwright browsers
+        # `--with-deps` installs the system libraries the browsers need. On a
+        # cache hit the binaries are present but those libs are not (the runner
+        # image is fresh each time), so install deps unconditionally and skip
+        # only the browser download.
+        run: |
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+            npx playwright install-deps chromium webkit
+          else
+            npx playwright install --with-deps chromium webkit
+          fi
+
+      - name: Verify required secrets are configured
+        # Fail early with a clear message rather than letting `next build`
+        # produce a broken app and every test fail for the same opaque reason.
+        run: |
+          missing=""
+          [ -n "${NEXT_PUBLIC_SUPABASE_URL:-}" ] || missing="$missing E2E_SUPABASE_URL"
+          [ -n "${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}" ] || missing="$missing E2E_SUPABASE_ANON_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error title=Missing repository secrets::Set these in Settings → Secrets and variables → Actions:$missing. See e2e/README.md."
+            exit 1
+          fi
+          echo "✓ Required Supabase secrets present."
+
+          # Report which optional suites will be skipped so the run page says so
+          # up front, not just in the test summary.
+          for pair in "E2E_MEMBER_EMAIL:member portal" "E2E_ADMIN_EMAIL:admin panel" "E2E_KIOSK_PIN:kiosk check-in"; do
+            var="${pair%%:*}"; label="${pair#*:}"
+            if [ -z "$(eval echo \"\$$var\")" ]; then
+              echo "::notice title=Suite skipped::$label tests will be skipped — $var is not set."
+            fi
+          done
+
+      - name: Cache Next build
+        # Same cache strategy as ci.yml. Saves 60-90s on a warm hit.
+        if: ${{ !inputs.base_url }}
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('src/**/*.[jt]s', 'src/**/*.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+
+      - name: Build
+        # Skipped entirely when testing a deployed URL — nothing local to serve.
+        if: ${{ !inputs.base_url }}
+        run: npm run build
+
+      - name: Run Playwright
+        id: playwright
+        # Do not stop the workflow here. A failing suite is the case the
+        # reporting steps exist for, so they must all still run.
+        continue-on-error: true
+        run: |
+          args=""
+          if [ -n "${{ inputs.grep }}" ]; then
+            args="--grep ${{ inputs.grep }}"
+          fi
+          npx playwright test $args
+
+      - name: Parse results
+        id: parse
+        # Runs even when the suite failed — that is the point. `always()` rather
+        # than `success()` so a crashed run still reports what it managed.
+        if: always()
+        run: |
+          summary="e2e/.artifacts/summary.json"
+          if [ ! -f "$summary" ]; then
+            # The reporter never wrote a summary — Playwright itself failed to
+            # start (bad config, missing browser, build not served). Surface that
+            # distinctly, because "0 failures" would be a lie.
+            echo "failed_count=-1" >> "$GITHUB_OUTPUT"
+            echo "passed_count=0" >> "$GITHUB_OUTPUT"
+            echo "headline=Playwright did not produce a report — the run crashed before testing" >> "$GITHUB_OUTPUT"
+            echo "::error title=Nightly UI tests crashed::No summary.json was written. Check the 'Run Playwright' step log."
+            exit 0
+          fi
+
+          failed=$(node -p "require('./e2e/.artifacts/summary.json').counts.failed")
+          passed=$(node -p "require('./e2e/.artifacts/summary.json').counts.passed")
+          flaky=$(node -p "require('./e2e/.artifacts/summary.json').counts.flaky")
+          skipped=$(node -p "require('./e2e/.artifacts/summary.json').counts.skipped")
+
+          echo "failed_count=$failed" >> "$GITHUB_OUTPUT"
+          echo "passed_count=$passed" >> "$GITHUB_OUTPUT"
+
+          if [ "$failed" -gt 0 ]; then
+            headline="$failed failing, $passed passing ($skipped skipped)"
+          else
+            headline="all $passed passing ($flaky flaky, $skipped skipped)"
+          fi
+          echo "headline=$headline" >> "$GITHUB_OUTPUT"
+          echo "Nightly result: $headline"
+
+      # The step summary itself is written by the custom reporter directly to
+      # $GITHUB_STEP_SUMMARY, so there is no step for it here.
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-html-report
+          path: e2e/.artifacts/html-report
+          # 30 days: long enough to compare against last month's run when
+          # investigating a slow regression, short enough not to hoard storage.
+          retention-days: 30
+
+      - name: Upload traces, videos, and screenshots
+        # Only on failure — these are the large artifacts and there is nothing to
+        # look at when everything passed.
+        if: always() && steps.parse.outputs.failed_count != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-artifacts
+          path: e2e/.artifacts/test-results
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload machine-readable summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-summary
+          path: |
+            e2e/.artifacts/summary.json
+            e2e/.artifacts/summary.md
+            e2e/.artifacts/junit.xml
+          retention-days: 30
+          if-no-files-found: ignore
+
+  # ── 2. Publish the dashboard to GitHub Pages ─────────────────────────────
+  publish-dashboard:
+    name: Publish dashboard
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # Pages deployment needs its own permissions and environment. Scoped to this
+    # job only so the test job keeps read-only access to the repo.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download summary
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-summary
+          path: e2e/.artifacts
+        # A crashed test job writes no summary; skip the dashboard rather than
+        # failing a second job for the same root cause.
+        continue-on-error: true
+
+      - name: Download HTML report
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-html-report
+          path: dashboard/report
+        continue-on-error: true
+
+      - name: Check we have something to publish
+        id: check
+        run: |
+          if [ -f e2e/.artifacts/summary.json ]; then
+            echo "have_summary=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have_summary=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Dashboard skipped::No summary.json — the test job crashed before reporting."
+          fi
+
+      - name: Restore previous history
+        if: steps.check.outputs.have_summary == 'true'
+        # The dashboard's value is its history, which must survive between runs.
+        # Pages deployments are not readable from a workflow, so history is kept
+        # in the Actions cache instead. `restore-keys` picks up the most recent
+        # entry regardless of run number; the exact key never hits, which is what
+        # makes each run write a fresh cache entry rather than being frozen at
+        # the first one (cache entries are immutable once written).
+        uses: actions/cache/restore@v4
+        with:
+          path: dashboard/history.json
+          key: ui-test-history-${{ github.run_id }}
+          restore-keys: |
+            ui-test-history-
+
+      - name: Build dashboard
+        if: steps.check.outputs.have_summary == 'true'
+        run: npx tsx e2e/reporters/build-dashboard.ts dashboard
+
+      - name: Save history
+        if: steps.check.outputs.have_summary == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: dashboard/history.json
+          key: ui-test-history-${{ github.run_id }}
+
+      - name: Configure Pages
+        if: steps.check.outputs.have_summary == 'true'
+        uses: actions/configure-pages@v5
+        continue-on-error: true
+        id: pages-config
+
+      - name: Upload Pages artifact
+        if: steps.check.outputs.have_summary == 'true' && steps.pages-config.outcome == 'success'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dashboard
+
+      - name: Deploy to Pages
+        id: deploy
+        if: steps.check.outputs.have_summary == 'true' && steps.pages-config.outcome == 'success'
+        uses: actions/deploy-pages@v4
+
+      - name: Explain a skipped deploy
+        if: steps.check.outputs.have_summary == 'true' && steps.pages-config.outcome != 'success'
+        run: |
+          echo "::warning title=GitHub Pages not enabled::The dashboard was built but not published. Enable it under Settings → Pages → Source: GitHub Actions. The report is still available as a workflow artifact."
+
+  # ── 3. Open / update / close the tracking issue ──────────────────────────
+  report-issue:
+    name: Tracking issue
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download summary
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-summary
+          path: e2e/.artifacts
+        continue-on-error: true
+
+      - name: Open, update, or close the tracking issue
+        uses: actions/github-script@v7
+        env:
+          FAILED_COUNT: ${{ needs.test.outputs.failed_count }}
+          HEADLINE: ${{ needs.test.outputs.summary_headline }}
+        with:
+          script: |
+            const fs = require('fs');
+
+            // A single, stable title so runs update one issue instead of opening
+            // a new one every night. Searching by title is more robust here than
+            // a label, because the label may not exist on a fresh repo.
+            const ISSUE_TITLE = 'Nightly UI tests are failing';
+            const MARKER = '<!-- nightly-ui-tests -->';
+
+            const failedCount = Number(process.env.FAILED_COUNT ?? '0');
+            const headline = process.env.HEADLINE || 'result unavailable';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            // People to notify. Assignment is best-effort: a username that is not
+            // a repo collaborator makes the API reject the whole call, so we try
+            // and fall back to creating the issue unassigned.
+            const ASSIGNEES = ['fabriziomendez'];
+
+            let summaryMarkdown = '';
+            try {
+              summaryMarkdown = fs.readFileSync('e2e/.artifacts/summary.md', 'utf8');
+            } catch {
+              summaryMarkdown = '_No summary was produced — the test run crashed before reporting. Check the workflow log._';
+            }
+
+            // Find an existing open tracking issue.
+            const { data: openIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const existing = openIssues.find(
+              (issue) => issue.title === ISSUE_TITLE || (issue.body ?? '').includes(MARKER)
+            );
+
+            // ── Recovered: close the issue rather than leaving a stale red flag.
+            if (failedCount === 0) {
+              if (existing) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existing.number,
+                  body: `## Recovered\n\nThe nightly UI suite is green again — ${headline}.\n\n[Run log](${runUrl})\n\nClosing automatically. It will reopen if the suite fails again.`,
+                });
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existing.number,
+                  state: 'closed',
+                  state_reason: 'completed',
+                });
+                core.info(`Closed #${existing.number} — suite recovered.`);
+              } else {
+                core.info('Suite is green and no tracking issue is open. Nothing to do.');
+              }
+              return;
+            }
+
+            const body = [
+              MARKER,
+              `## ${failedCount < 0 ? 'The nightly run crashed' : `${failedCount} UI test${failedCount === 1 ? '' : 's'} failing`}`,
+              '',
+              `Detected by the nightly run on \`${context.sha.slice(0, 7)}\`.`,
+              '',
+              `**[Open the run log →](${runUrl})**`,
+              '',
+              '---',
+              '',
+              summaryMarkdown,
+              '',
+              '---',
+              '',
+              '### How to debug',
+              '',
+              '1. Download the `playwright-html-report` artifact from the run above.',
+              '2. Unzip it and run `npx playwright show-report <folder>` — you get screenshots, video, and a step-by-step trace of each failure.',
+              '3. Reproduce locally with `npm run build && npm run test:e2e`, or narrow it down with `npm run test:e2e -- --grep "part of the test name"`.',
+              '',
+              '_This issue is maintained automatically: it is updated each night the suite fails and closed when the suite goes green._',
+            ].join('\n');
+
+            if (existing) {
+              // Update the body so the issue always reflects the LATEST failure
+              // rather than the first one, and comment so subscribers get a ping.
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: `### Still failing — ${headline}\n\n[Run log](${runUrl}) · commit \`${context.sha.slice(0, 7)}\``,
+              });
+              core.info(`Updated #${existing.number}.`);
+              core.summary.addRaw(`\n\n**Tracking issue:** #${existing.number} (updated)\n`);
+              await core.summary.write();
+              return;
+            }
+
+            // ── First failure: open the issue.
+            let created;
+            try {
+              ({ data: created } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: ISSUE_TITLE,
+                body,
+                assignees: ASSIGNEES,
+              }));
+            } catch (error) {
+              core.warning(`Could not assign ${ASSIGNEES.join(', ')} (${error.message}). Opening unassigned.`);
+              ({ data: created } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: ISSUE_TITLE,
+                body,
+              }));
+            }
+
+            core.info(`Opened #${created.number}.`);
+            core.summary.addRaw(`\n\n**Tracking issue:** #${created.number} (opened)\n`);
+            await core.summary.write();
+
+  # ── 4. Make the workflow itself red when tests failed ────────────────────
+  verdict:
+    name: Verdict
+    needs: [test, report-issue]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail the workflow if the suite failed
+        # The test job uses continue-on-error so reporting always runs, which
+        # leaves it green. This job carries the actual pass/fail signal, so the
+        # workflow badge and the Actions list show the truth.
+        run: |
+          failed="${{ needs.test.outputs.failed_count }}"
+          if [ "$failed" = "-1" ]; then
+            echo "::error::The nightly run crashed before producing a report."
+            exit 1
+          fi
+          if [ "$failed" != "0" ]; then
+            echo "::error::${{ needs.test.outputs.summary_headline }}"
+            exit 1
+          fi
+          echo "✓ ${{ needs.test.outputs.summary_headline }}"

@@ -5,6 +5,8 @@ import Navbar from "@/components/landing/Navbar";
 import Jumbotron from "@/components/landing/Jumbotron";
 import BeltDivider from "@/components/landing/BeltDivider";
 import UpdatesFeed from "@/components/landing/UpdatesFeed";
+import MissionSection from "@/components/landing/MissionSection";
+import MatRules from "@/components/landing/MatRules";
 import ScheduleSection from "@/components/landing/ScheduleSection";
 import TeamGrid from "@/components/landing/TeamGrid";
 import BlogPreview from "@/components/landing/BlogPreview";
@@ -16,7 +18,9 @@ import LocationContact from "@/components/landing/LocationContact";
 import Footer from "@/components/landing/Footer";
 import type { SiteSection } from "@/lib/supabase/types";
 
-const DEFAULT_SECTIONS = ["updates","schedule","team","blog","pricing","faq","instagram","subscribe","contact"];
+// Blog e Instagram quedan fuera del fallback hasta tener contenido real —
+// siguen disponibles vía site_sections cuando el admin los active.
+const DEFAULT_SECTIONS = ["updates","mission","schedule","rules","pricing","team","faq","subscribe","contact"];
 
 type SectionConfig = Pick<SiteSection, "key" | "display_title" | "display_subtitle">;
 
@@ -48,7 +52,9 @@ export default async function HomePage() {
 
   const SECTION_MAP: Record<string, React.ReactElement> = {
     updates:   <UpdatesFeed   sectionConfig={section("updates")} />,
+    mission:   <MissionSection sectionConfig={section("mission")} />,
     schedule:  <ScheduleSection sectionConfig={section("schedule")} />,
+    rules:     <MatRules      sectionConfig={section("rules")} />,
     team:      <TeamGrid      sectionConfig={section("team")} />,
     blog:      <BlogPreview   sectionConfig={section("blog")} />,
     pricing:   <Pricing       sectionConfig={section("pricing")} />,

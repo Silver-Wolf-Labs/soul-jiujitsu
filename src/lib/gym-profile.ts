@@ -28,25 +28,31 @@ export interface GymProfile {
 
 // ── Defaults (Soul Jiu-Jitsu — used when DB has no override) ──────────────
 //
-// TODO(setup): values marked TODO_* are placeholders. Replace them before any
-// public deploy — either run `npx tsx scripts/bootstrap-gym.ts` (writes to
-// site_settings, no code change needed) or edit this block. See SETUP.md.
+// These are the real values, matching the `gym_*` / `contact_*` rows in
+// site_settings. They are the fallback for two cases: the DB being unreachable
+// (the `catch` in getGymProfile) and a key being absent or empty. Keeping them
+// real rather than TODO_* means an outage degrades to correct contact details
+// instead of rendering "TODO_EMAIL" as a mailto: link to visitors.
+//
+// To change them for a deployment, prefer site_settings (via the admin UI or
+// `npx tsx scripts/bootstrap-gym.ts`) — no code change needed. See SETUP.md.
 
 export const DEFAULT_GYM_PROFILE: GymProfile = {
-  gymName: "Soul Jiu-Jitsu",
+  gymName: "Soul Jiu Jitsu",
   shortName: "Soul JJ",
   logoText: "SOUL",
   logoDot: "\u2022",
-  cityName: "TODO_CITY",
-  tagline: "Train. Improve. Belong.",
-  timezone: "America/Chicago",
-  affiliateText: "Soul Jiu-Jitsu. Training athletes of all levels.",
-  footerTags: ["BJJ", "No-Gi", "Youth"],
-  joinButtonText: "Join Soul JJ",
+  cityName: "Curridabat",
+  tagline: "Jiu jitsu para el alma. Formamos personas fuertes dentro y fuera del tatami.",
+  timezone: "America/Costa_Rica",
+  affiliateText:
+    "Jiu jitsu integral en Pinares de Curridabat. Un espacio 100% seguro, inclusivo y respetuoso. Afiliados a Sektor Jiu-Jitsu.",
+  footerTags: ["Gi", "No-Gi", "Kids", "Open Mat"],
+  joinButtonText: "Únete a Soul",
   meta: {
-    title: "Soul Jiu-Jitsu | Brazilian Jiu-Jitsu",
+    title: "Soul Jiu Jitsu | Jiu Jitsu en Curridabat, Costa Rica",
     description:
-      "Train Brazilian Jiu-Jitsu at Soul Jiu-Jitsu. Gi, No-Gi, and Youth classes for all levels.",
+      "Entrena jiu jitsu en Soul Jiu Jitsu, Pinares de Curridabat. Clases de Gi, No-Gi, kids y open mats en un espacio seguro, inclusivo y respetuoso.",
     url: "http://localhost:3000",
   },
   social: {
@@ -54,13 +60,15 @@ export const DEFAULT_GYM_PROFILE: GymProfile = {
     instagramHandle: "",
   },
   contact: {
-    address: "TODO_ADDRESS",
-    city: "TODO_CITY",
-    state: "TODO_STATE",
-    zip: "TODO_ZIP",
-    phone: "TODO_PHONE",
-    phoneHref: "tel:0000000000",
-    email: "TODO_EMAIL",
+    address: "Pinares",
+    city: "Curridabat",
+    state: "San José",
+    zip: "11802",
+    // Sin teléfono público por ahora — los componentes ocultan la fila
+    // cuando está vacío. Se configura vía site_settings (contact_phone).
+    phone: "",
+    phoneHref: "",
+    email: "admin@silverwolflabs.com",
   },
 };
 

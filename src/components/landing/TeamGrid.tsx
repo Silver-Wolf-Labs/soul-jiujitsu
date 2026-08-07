@@ -12,7 +12,7 @@ interface SectionConfig { display_title: string | null; display_subtitle: string
 interface Props { sectionConfig?: SectionConfig; }
 
 const FALLBACK_TEAM: TeamMember[] = [
-  { id: 1, name: "Head Coach", role: "Head Instructor", belt: BeltColor.Black, bio: "Add your team via the admin panel.", photo_url: null, slug: "head-coach", order: 0, type: TeamMemberType.HeadCoach, active: true, visible_on_public_team: true, visible_until: null },
+  { id: 1, name: "Profesor Soul", role: "Profesor principal", belt: BeltColor.Black, bio: "Lidera cada clase con técnica, paciencia y respeto. Muy pronto conocerás aquí a todo el equipo.", photo_url: null, slug: "head-coach", order: 0, type: TeamMemberType.HeadCoach, active: true, visible_on_public_team: true, visible_until: null },
 ];
 
 export default async function TeamGrid({ sectionConfig }: Props) {
@@ -44,11 +44,11 @@ export default async function TeamGrid({ sectionConfig }: Props) {
   }
 
   return (
-    <section id="team" className="py-10 px-5 nav:px-12">
+    <section id="team" className="py-14 px-5 nav:px-12">
       <SectionHeader
-        tag={sectionConfig?.display_subtitle ?? "Instructors & Guests"}
-        title={sectionConfig?.display_title ?? "The Team"}
-        subtitle="Experienced coaches with decades on the mat — and the occasional world champion dropping by."
+        tag={sectionConfig?.display_subtitle ?? "Profesores"}
+        title={sectionConfig?.display_title ?? "El equipo"}
+        subtitle="Las personas que hacen de Soul un espacio seguro para entrenar y crecer."
         className="mb-6"
       />
 

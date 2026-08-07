@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bebas_Neue, Inter, DM_Mono } from "next/font/google";
+import { Fraunces, Inter, DM_Mono } from "next/font/google";
 import "./globals.css";
 import { validateEnv } from "@/lib/env";
 import { getActiveThemeCssVars } from "@/lib/themes/server";
@@ -10,11 +10,14 @@ import { GymProfileProvider } from "@/lib/gym-profile-context";
 // Fail fast on missing env vars — runs once at cold start
 validateEnv();
 
-const bebasNeue = Bebas_Neue({
-  weight: "400",
+// Display serif — soft, soulful curves that echo the SOUL logo lettering.
+// The SOFT axis rounds the terminals; opsz keeps large sizes elegant.
+const fraunces = Fraunces({
   subsets: ["latin"],
-  variable: "--font-bebas",
+  variable: "--font-fraunces",
   display: "swap",
+  style: ["normal", "italic"],
+  axes: ["SOFT", "WONK", "opsz"],
 });
 
 const inter = Inter({
@@ -62,8 +65,8 @@ export default async function RootLayout({
   ]);
   return (
     <html
-      lang="en"
-      className={`${bebasNeue.variable} ${inter.variable} ${dmMono.variable}`}
+      lang="es"
+      className={`${fraunces.variable} ${inter.variable} ${dmMono.variable}`}
     >
       <head>
         <style dangerouslySetInnerHTML={{ __html: themeCss }} />

@@ -4,11 +4,11 @@ import { BeltColor, BELT_COLOR_MAP } from "./constants";
 
 /**
  * Format a date string or Date object for display.
- * e.g. "2026-03-26" → "Mar 26, 2026"
+ * e.g. "2026-03-26" → "26 mar 2026"
  */
 export function formatDate(date: string | Date): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleDateString("en-US", {
+  return d.toLocaleDateString("es-CR", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -18,11 +18,11 @@ export function formatDate(date: string | Date): string {
 
 /**
  * Format a date string or Date object with time to the second.
- * e.g. "2026-03-26T14:30:05Z" → "Mar 26, 2026, 2:30:05 PM"
+ * e.g. "2026-03-26T14:30:05Z" → "26 mar 2026, 2:30:05 p. m."
  */
 export function formatDateTime(date: string | Date): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleString("en-US", {
+  return d.toLocaleString("es-CR", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -34,11 +34,11 @@ export function formatDateTime(date: string | Date): string {
 
 /**
  * Format a date with day of week.
- * e.g. "2026-03-26" → "Thu Mar 26, 2026"
+ * e.g. "2026-03-26" → "jue, 26 mar 2026"
  */
 export function formatDateLong(date: string | Date): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleDateString("en-US", {
+  return d.toLocaleDateString("es-CR", {
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -49,21 +49,21 @@ export function formatDateLong(date: string | Date): string {
 
 /**
  * Estimate read time from body text.
- * Returns e.g. "5 min read"
+ * Returns e.g. "5 min de lectura"
  */
 export function estimateReadTime(body: string): string {
   const words = body.trim().split(/\s+/).length;
   const minutes = Math.max(1, Math.round(words / 200));
-  return `${minutes} min read`;
+  return `${minutes} min de lectura`;
 }
 
 /**
  * Format a date string with the gym's timezone.
- * e.g. "Mar 26, 2026" — date only, in the specified timezone.
+ * e.g. "26 mar 2026" — date only, in the specified timezone.
  */
 export function formatDateTz(date: string | Date, timeZone: string): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleDateString("en-US", {
+  return d.toLocaleDateString("es-CR", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -73,11 +73,11 @@ export function formatDateTz(date: string | Date, timeZone: string): string {
 
 /**
  * Format a date+time string with the gym's timezone and abbreviation.
- * e.g. "Mar 26, 2026, 3:42 PM CST"
+ * e.g. "26 mar 2026, 3:42 p. m. GMT-6"
  */
 export function formatDateTimeTz(date: string | Date, timeZone: string): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleString("en-US", {
+  return d.toLocaleString("es-CR", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -91,11 +91,11 @@ export function formatDateTimeTz(date: string | Date, timeZone: string): string 
 
 /**
  * Format a time string with timezone abbreviation.
- * e.g. "3:42 PM CST"
+ * e.g. "3:42 p. m. GMT-6"
  */
 export function formatTimeTz(date: string | Date, timeZone: string): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleTimeString("en-US", {
+  return d.toLocaleTimeString("es-CR", {
     hour: "numeric",
     minute: "2-digit",
     timeZone,

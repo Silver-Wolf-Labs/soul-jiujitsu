@@ -128,7 +128,7 @@ const config: Config = {
       },
 
       fontFamily: {
-        display: ["var(--font-bebas)", "sans-serif"],
+        display: ["var(--font-fraunces)", "Georgia", "serif"],
         body:    ["var(--font-inter)", "sans-serif"],
         mono:    ["var(--font-dm-mono)", "monospace"],
       },

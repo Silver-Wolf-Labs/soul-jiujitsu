@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { type AnchorHTMLAttributes, type ButtonHTMLAttributes } from "react";
 
-type Variant = "primary" | "yellow" | "ghost";
+type Variant = "primary" | "yellow" | "ghost" | "ghost-dark";
 type Size = "sm" | "md";
 
 interface BaseProps {
@@ -25,6 +25,8 @@ const VARIANT_CLASSES: Record<Variant, string> = {
     "bg-yellow text-black hover:bg-yellow-mid active:scale-95",
   ghost:
     "bg-transparent text-ink border border-line-dark hover:border-black hover:bg-off-white",
+  "ghost-dark":
+    "bg-transparent text-white/85 border border-white/25 hover:border-white hover:text-white hover:bg-white/5",
 };
 
 const SIZE_CLASSES: Record<Size, string> = {

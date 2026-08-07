@@ -86,7 +86,7 @@ export default function AlertBannerClient({ banners, interval }: Props) {
         <button
           onClick={dismiss}
           className="opacity-50 hover:opacity-100 bg-transparent border-none text-lg cursor-pointer leading-none flex-shrink-0"
-          aria-label="Dismiss"
+          aria-label="Cerrar aviso"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-4 h-4" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>

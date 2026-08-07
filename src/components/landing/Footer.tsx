@@ -4,10 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getGymProfile } from "@/lib/gym-profile";
 
 const FALLBACK_INFO_LINKS = [
-  { label: "FAQ",       href: "#faq" },
-  { label: "Contact",   href: "#contact" },
-  { label: "Subscribe", href: "#subscribe" },
-  { label: "Waiver",    href: "#" },
+  { label: "Preguntas frecuentes", href: "#faq" },
+  { label: "Suscribirse",          href: "#subscribe" },
+  { label: "Únete",                href: "/join" },
 ];
 
 async function getFooterLinks() {
@@ -47,23 +46,26 @@ export default async function Footer() {
   const phoneHref = contact.phoneHref;
 
   return (
-    <footer className="bg-black text-white/50 pt-16 pb-8 px-5 nav:px-12">
+    <footer className="bg-soul-dark text-white/50 pt-16 pb-8 px-5 nav:px-12">
       <div className="grid grid-cols-2 nav:grid-cols-[2fr_1fr_1fr] gap-12 mb-12">
         {/* Brand */}
         <div className="col-span-2 nav:col-span-1">
-          <div className="font-display text-2xl text-white mb-3 flex items-center gap-1.5">
-            {profile.logoText}{" "}
-            <span className="text-yellow">{profile.logoDot}</span>{" "}
-            {profile.cityName}
+          <div className="flex items-baseline gap-2 mb-3">
+            <span className="font-display font-soul text-[26px] leading-none text-soul-gold">
+              {profile.logoText}
+            </span>
+            <span className="font-display italic text-[15px] text-white/80 leading-none">
+              Jiu Jitsu
+            </span>
           </div>
-          <p className="text-[13px] text-white/35 leading-relaxed max-w-[220px] mb-6">
+          <p className="text-[13px] text-white/40 leading-relaxed max-w-[260px] mb-6">
             {profile.affiliateText}
           </p>
           <div className="flex flex-wrap gap-2">
             {profile.footerTags.map((b) => (
               <span
                 key={b}
-                className="bg-white/5 border border-white/10 rounded-full px-3 py-1 text-[11px] text-white/40"
+                className="bg-white/5 border border-white/10 rounded-full px-3 py-1 text-[11px] text-white/45"
               >
                 {b}
               </span>
@@ -73,8 +75,8 @@ export default async function Footer() {
 
         {/* Site links */}
         <div>
-          <h4 className="text-[11px] font-bold tracking-[0.15em] uppercase text-white/30 mb-4">
-            Site
+          <h4 className="text-[11px] font-bold tracking-[0.15em] uppercase text-[#e6b323]/80 mb-4">
+            Sitio
           </h4>
           {footerLinks.site.map(({ label, href }) => (
             <Link
@@ -86,7 +88,7 @@ export default async function Footer() {
             </Link>
           ))}
           {footerLinks.info
-            .filter(({ label }) => !["Contact"].includes(label))
+            .filter(({ label }) => !["Contacto", "Contact"].includes(label))
             .map(({ label, href }) => (
             <Link
               key={label}
@@ -100,34 +102,38 @@ export default async function Footer() {
 
         {/* Connect */}
         <div>
-          <h4 className="text-[11px] font-bold tracking-[0.15em] uppercase text-white/30 mb-4">
-            Connect
+          <h4 className="text-[11px] font-bold tracking-[0.15em] uppercase text-[#e6b323]/80 mb-4">
+            Contacto
           </h4>
-          <a
-            href={profile.social.instagram}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block text-[13px] text-white/50 hover:text-white transition-colors duration-150 mb-2.5"
-          >
-            Instagram
-          </a>
-          <a
-            href={phoneHref}
-            className="block text-[13px] text-white/50 hover:text-white transition-colors duration-150 mb-2.5"
-          >
-            {contact.phone}
-          </a>
+          {profile.social.instagram && (
+            <a
+              href={profile.social.instagram}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block text-[13px] text-white/50 hover:text-white transition-colors duration-150 mb-2.5"
+            >
+              Instagram
+            </a>
+          )}
+          {contact.phone && (
+            <a
+              href={phoneHref}
+              className="block text-[13px] text-white/50 hover:text-white transition-colors duration-150 mb-2.5"
+            >
+              {contact.phone}
+            </a>
+          )}
           <a
             href={`mailto:${contact.email}`}
             className="block text-[13px] text-white/50 hover:text-white transition-colors duration-150 mb-2.5"
           >
-            Email Us
+            Escríbenos
           </a>
           <Link
-            href="#contact"
+            href="/#contact"
             className="block text-[13px] text-white/50 hover:text-white transition-colors duration-150 mb-2.5"
           >
-            Contact Form
+            Formulario de contacto
           </Link>
         </div>
       </div>
@@ -137,15 +143,15 @@ export default async function Footer() {
         <span>© {new Date().getFullYear()} {profile.gymName}</span>
         <span className="flex items-center gap-4">
           <Link href="/privacy" className="text-white/30 hover:text-white/70 transition-colors">
-            Privacy
+            Privacidad
           </Link>
           <Link href="/terms" className="text-white/30 hover:text-white/70 transition-colors">
-            Terms
+            Términos
           </Link>
         </span>
         <span>
           {contact.address},{" "}
-          {contact.city} {contact.state}{" "}
+          {contact.city}, {contact.state}{" "}
           {contact.zip}
         </span>
       </div>

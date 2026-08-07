@@ -9,10 +9,10 @@ interface SectionConfig { display_title: string | null; display_subtitle: string
 interface Props { sectionConfig?: SectionConfig; }
 
 const FALLBACK_POSTS: BlogPost[] = [
-  { id: 1, title: "Why the Guillotine is the Most Underrated Submission in No-Gi", slug: "guillotine-submission", body: "Breaking down the high elbow guillotine — how to set it up off a failed double leg and three grip variations to drill.", tag: "Technique", author: "Coach", excerpt: "Breaking down the high elbow guillotine.", published: true, created_at: "2026-03-20", starts_at: null, expires_at: null, display_order: 0 },
-  { id: 2, title: "3 Things We Learned from the Latest Tournament", slug: "tournament-recap", body: "Competition recap.", tag: "Competition", author: "Coach", excerpt: "Our competitors medaled at the latest open.", published: true, created_at: "2026-03-18", starts_at: null, expires_at: null, display_order: 0 },
-  { id: 3, title: "How to Survive Your First Week of BJJ Without Dying", slug: "first-week-bjj", body: "Beginner guide.", tag: "Beginner", author: "Coach", excerpt: "Every black belt survived their first week.", published: true, created_at: "2026-03-10", starts_at: null, expires_at: null, display_order: 0 },
-  { id: 4, title: "Gi vs No-Gi: Which Should You Train First?", slug: "gi-vs-nogi", body: "The classic debate.", tag: "Beginner", author: "Coach", excerpt: "We break down the classic debate for new students.", published: true, created_at: "2026-02-28", starts_at: null, expires_at: null, display_order: 0 },
+  { id: 1, title: "Cómo sobrevivir a tu primera semana de jiu jitsu", slug: "primera-semana", body: "Todos los cinturones negros sobrevivieron a su primera semana. Guía práctica para empezar sin miedo: qué esperar, qué llevar y cómo cuidar tu cuerpo.", tag: "Beginner", author: "Soul", excerpt: "Todos los cinturones negros sobrevivieron a su primera semana.", published: true, created_at: "2026-08-01", starts_at: null, expires_at: null, display_order: 0 },
+  { id: 2, title: "¿Gi o No-Gi? Por cuál empezar", slug: "gi-o-nogi", body: "El clásico debate, explicado para principiantes.", tag: "Beginner", author: "Soul", excerpt: "El clásico debate, explicado para quienes empiezan.", published: true, created_at: "2026-07-20", starts_at: null, expires_at: null, display_order: 0 },
+  { id: 3, title: "Por qué el jiu jitsu es para todos", slug: "jiu-jitsu-para-todos", body: "Técnica sobre fuerza: el arte suave no distingue tamaño ni edad.", tag: "News", author: "Soul", excerpt: "Técnica sobre fuerza: el arte suave no distingue tamaño ni edad.", published: true, created_at: "2026-07-10", starts_at: null, expires_at: null, display_order: 0 },
+  { id: 4, title: "La importancia del open mat", slug: "open-mat", body: "Rodar libre es donde la técnica se vuelve instinto.", tag: "Technique", author: "Soul", excerpt: "Rodar libre es donde la técnica se vuelve instinto.", published: true, created_at: "2026-07-01", starts_at: null, expires_at: null, display_order: 0 },
 ];
 
 export default async function BlogPreview({ sectionConfig }: Props) {
@@ -40,11 +40,11 @@ export default async function BlogPreview({ sectionConfig }: Props) {
   const [featured, ...sidebarPosts] = posts;
 
   return (
-    <section id="blog" className="py-10 px-5 nav:px-12">
+    <section id="blog" className="py-14 px-5 nav:px-12">
       <SectionHeader
-        tag={sectionConfig?.display_subtitle ?? "From the Mats"}
+        tag={sectionConfig?.display_subtitle ?? "Desde el tatami"}
         title={sectionConfig?.display_title ?? "Blog"}
-        subtitle="Technique breakdowns, competition recaps, gym news, and stories from the community."
+        subtitle="Técnica, historias y noticias de la comunidad Soul."
         className="mb-6"
       />
 
@@ -55,7 +55,7 @@ export default async function BlogPreview({ sectionConfig }: Props) {
             <Link key={post.id} href={`/blog/${post.slug}`} className="no-underline">
               <article className="bg-white border border-line rounded-lg overflow-hidden hover:shadow-md transition-shadow duration-200 cursor-pointer h-full flex flex-col">
                 <div className="h-[120px] bg-gradient-to-br from-black to-blog-end flex items-center justify-center">
-                  <span className="font-display text-[48px] text-white/[0.06]">BJJ</span>
+                  <span className="font-display font-soul text-[44px] text-white/[0.07]">SOUL</span>
                 </div>
                 <div className="p-5 flex-1 flex flex-col">
                   <span className="inline-block self-start text-[10px] font-bold tracking-[0.12em] uppercase px-2.5 py-1 rounded-full bg-yellow-light text-yellow-deep border border-yellow-border mb-2">
@@ -84,7 +84,7 @@ export default async function BlogPreview({ sectionConfig }: Props) {
           <Link href={`/blog/${featured.slug}`} className="no-underline">
             <article className="bg-white border border-line rounded-lg overflow-hidden hover:shadow-xl transition-shadow duration-200 cursor-pointer h-full">
               <div className="h-[260px] bg-gradient-to-br from-black to-blog-end flex items-center justify-center">
-                <span className="font-display text-[80px] text-white/[0.06]">BJJ</span>
+                <span className="font-display font-soul text-[72px] text-white/[0.07]">SOUL</span>
               </div>
               <div className="p-7">
                 <span className="inline-block text-[10px] font-bold tracking-[0.12em] uppercase px-2.5 py-1 rounded-full bg-yellow-light text-yellow-deep border border-yellow-border mb-3">
@@ -97,7 +97,7 @@ export default async function BlogPreview({ sectionConfig }: Props) {
                   {featured.excerpt}
                 </p>
                 <div className="flex gap-4 text-xs text-muted mt-4">
-                  <span>By {featured.author}</span>
+                  <span>Por {featured.author}</span>
                   <span>{formatDate(featured.created_at)}</span>
                   <span>{estimateReadTime(featured.body)}</span>
                 </div>

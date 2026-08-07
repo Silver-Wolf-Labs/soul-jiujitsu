@@ -8,10 +8,9 @@ interface SectionConfig { display_title: string | null; display_subtitle: string
 interface Props { sectionConfig?: SectionConfig; }
 
 const FALLBACK_UPDATES: Update[] = [
-  { id: 1, type: UpdateType.Alert, title: "6PM Gi Class Cancelled — Maintenance", body: "Thursday evening Gi class is cancelled due to facility maintenance. Academy reopens Friday 6am.", date: "2026-03-26", published: true, starts_at: null, expires_at: null, display_order: 1 },
-  { id: 2, type: UpdateType.Event, title: "Guest Instructor Seminar — Save the Date", body: "Special 2-hour technique seminar coming soon. Space is limited.", date: "2026-04-12", published: true, starts_at: null, expires_at: null, display_order: 2 },
-  { id: 3, type: UpdateType.Class, title: "Ladies-Only Gi Class Added Wednesdays", body: "Dedicated ladies Gi every Wednesday at 6pm.", date: "2026-04-07", published: true, starts_at: null, expires_at: null, display_order: 3 },
-  { id: 4, type: UpdateType.News, title: "3 Competitors Medal at Latest Tournament", body: "Congrats to our team! Full results and photos posted inside.", date: "2026-03-18", published: true, starts_at: null, expires_at: null, display_order: 4 },
+  { id: 1, type: UpdateType.News, title: "Bienvenidos al nuevo sitio de Soul Jiu Jitsu", body: "Horarios, planes, reglas del mat y toda la información de la academia, ahora en un solo lugar.", date: "2026-08-06", published: true, starts_at: null, expires_at: null, display_order: 1 },
+  { id: 2, type: UpdateType.Class, title: "Clases kids: lunes y sábados", body: "Los más pequeños entrenan los lunes a las 5:00 p.m. y los sábados a las 9:30 a.m. Disciplina, respeto y confianza.", date: "2026-08-06", published: true, starts_at: null, expires_at: null, display_order: 2 },
+  { id: 3, type: UpdateType.Event, title: "Open mats de fin de semana", body: "Viernes 7:00 p.m. open mat de Gi y sábados 12:00 m.d. open mat de No-Gi. Cierra la semana en el tatami.", date: "2026-08-06", published: true, starts_at: null, expires_at: null, display_order: 3 },
 ];
 
 export default async function UpdatesFeed({ sectionConfig }: Props) {
@@ -42,11 +41,11 @@ export default async function UpdatesFeed({ sectionConfig }: Props) {
   }
 
   return (
-    <section id="updates" className="py-10 px-5 nav:px-12">
+    <section id="updates" className="py-14 px-5 nav:px-12">
       <div className="mb-10">
         <SectionHeader
-          tag={sectionConfig?.display_subtitle ?? "Latest"}
-          title={sectionConfig?.display_title ?? "News & Updates"}
+          tag={sectionConfig?.display_subtitle ?? "Al día"}
+          title={sectionConfig?.display_title ?? "Novedades"}
         />
       </div>
 

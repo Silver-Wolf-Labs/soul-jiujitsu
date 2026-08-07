@@ -11,11 +11,22 @@
     @apply bg-white text-ink font-body antialiased overflow-x-hidden;
   }
 
+  /* Fraunces display serif — soft axis rounds the terminals so headings
+     echo the bubbly SOUL logo lettering. Slight negative tracking because
+     serifs (unlike the previous condensed sans) read loose at display sizes. */
   h1,
   h2,
   h3,
   h4 {
-    @apply font-display tracking-wide;
+    @apply font-display;
+    letter-spacing: -0.015em;
+    font-weight: 620;
+    font-variation-settings: "SOFT" 70, "WONK" 0;
+  }
+
+  ::selection {
+    background: var(--color-yellow);
+    color: #171204;
   }
 }
 
@@ -32,6 +43,36 @@ body[data-analytics-loading="true"] [data-analytics-content] {
 }
 
 @layer utilities {
+  /* ── Soul brand surfaces ────────────────────────────────────────────────
+     Warm near-black canvas with faint gold + jungle-green glows. Used by
+     the landing's dark sections (hero, misión, reglas, suscripción, footer).
+     Deliberately NOT theme-tokenized: this is the fixed brand backdrop the
+     gold/green accents sit on. */
+  .bg-soul-dark {
+    background-color: #14110a;
+    background-image:
+      radial-gradient(1100px 480px at 88% -12%, rgba(230, 179, 35, 0.13), transparent 62%),
+      radial-gradient(900px 460px at -12% 112%, rgba(46, 125, 79, 0.12), transparent 60%);
+  }
+
+  .bg-soul-dark-flat {
+    background-color: #14110a;
+  }
+
+  /* Gold gradient text — hero headline accent, mirrors the glossy logo. */
+  .text-soul-gold {
+    background: linear-gradient(160deg, #f6d878 8%, #e6b323 42%, #b97f12 92%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Extra-soft, chunky Fraunces for brand-heavy headlines. */
+  .font-soul {
+    font-weight: 680;
+    font-variation-settings: "SOFT" 100, "WONK" 0;
+  }
+
   /* Jumbotron subtle grid pattern */
   .bg-grid-pattern {
     background-image: repeating-linear-gradient(

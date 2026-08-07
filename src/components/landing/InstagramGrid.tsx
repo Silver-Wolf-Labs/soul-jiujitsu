@@ -5,15 +5,17 @@ interface Props { sectionConfig?: SectionConfig; }
 
 export default async function InstagramGrid({ sectionConfig }: Props) {
   const profile = await getGymProfile();
-  const tag = sectionConfig?.display_subtitle ?? "Follow Along";
-  const title = sectionConfig?.display_title ?? profile.social.instagramHandle;
+  const tag = sectionConfig?.display_subtitle ?? "Síguenos";
+  const title =
+    sectionConfig?.display_title ??
+    (profile.social.instagramHandle || "Instagram");
 
   return (
-    <section id="instagram" className="py-10 px-5 nav:px-12">
-      <div className="inline-flex items-center gap-2 font-mono text-[13px] tracking-ultra uppercase text-blue-mid border-l-[3px] border-blue-mid pl-2.5 mb-4">
+    <section id="instagram" className="py-14 px-5 nav:px-12">
+      <div className="inline-flex items-center gap-2 font-mono text-[13px] tracking-ultra uppercase text-blue-mid border-l-[3px] border-yellow pl-2.5 mb-4">
         {tag}
       </div>
-      <h2 className="font-display text-[clamp(50px,6vw,80px)] text-black leading-none mb-7">
+      <h2 className="text-[clamp(40px,5.5vw,68px)] text-black leading-none mb-7">
         {title}
       </h2>
 
@@ -31,7 +33,7 @@ export default async function InstagramGrid({ sectionConfig }: Props) {
       </div>
 
       <p className="mt-5 text-center text-[13px] text-muted">
-        Connect your Instagram via{" "}
+        Conecta el Instagram de la academia vía{" "}
         <a
           href="https://embedsocial.com"
           target="_blank"
@@ -40,7 +42,7 @@ export default async function InstagramGrid({ sectionConfig }: Props) {
         >
           EmbedSocial
         </a>{" "}
-        or{" "}
+        o{" "}
         <a
           href="https://lightwidget.com"
           target="_blank"
@@ -49,7 +51,7 @@ export default async function InstagramGrid({ sectionConfig }: Props) {
         >
           LightWidget
         </a>{" "}
-        to auto-populate this feed.
+        para llenar esta galería automáticamente.
       </p>
     </section>
   );

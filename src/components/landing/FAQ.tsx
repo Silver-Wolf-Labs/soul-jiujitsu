@@ -31,10 +31,10 @@ export default async function FAQ({ sectionConfig }: Props) {
     : FAQ_ITEMS.map((i) => ({ question: i.question, answer: i.answer }));
 
   return (
-    <section id="faq" className="py-10 px-5 nav:px-12">
+    <section id="faq" className="py-14 px-5 nav:px-12">
       <SectionHeader
-        tag={sectionConfig?.display_subtitle ?? "Questions"}
-        title={sectionConfig?.display_title ?? "FAQ"}
+        tag={sectionConfig?.display_subtitle ?? "Dudas comunes"}
+        title={sectionConfig?.display_title ?? "Preguntas frecuentes"}
         className="mb-6"
       />
       <div className="max-w-[760px]">
