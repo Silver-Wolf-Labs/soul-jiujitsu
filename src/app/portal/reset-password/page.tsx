@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useGymProfile } from "@/lib/gym-profile-context";
@@ -14,15 +15,73 @@ export default function ResetPasswordPage() {
   const [errorMsg, setErrorMsg]     = useState("");
   const [sessionReady, setSessionReady] = useState(false);
 
-  // Supabase Auth redirects with token in URL hash; exchange it for a session
+  // Supabase sends the member here with the recovery tokens in the URL FRAGMENT:
+  //
+  //   /portal/reset-password#access_token=…&refresh_token=…&type=recovery
+  //
+  // This page used to wait for a PASSWORD_RECOVERY event and nothing else, which
+  // never arrived: `createBrowserClient` from @supabase/ssr is cookie-backed and
+  // does not implicitly consume an implicit-flow fragment the way the older
+  // localStorage client did. Verified against a real recovery link — the page sat
+  // on "Verifying your reset link…" indefinitely, with no error and no form, so
+  // the reset was impossible to complete. That is the bug.
+  //
+  // The fix is to stop waiting and establish the session explicitly from the
+  // fragment via setSession(). The event listener stays as a fast path for the
+  // case where the SDK does get there first.
   useEffect(() => {
     const supabase = createClient();
-    // Listen for the PASSWORD_RECOVERY event — Supabase fires it automatically
-    // when the page loads with a valid recovery token in the URL hash.
+    let done = false;
+    const ready = () => { if (!done) { done = true; setSessionReady(true); } };
+    const fail = () => {
+      if (done) return;
+      done = true;
+      setErrorMsg("This reset link is invalid or has expired. Please request a new one.");
+      setStatus("error");
+    };
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") setSessionReady(true);
+      if (event === "PASSWORD_RECOVERY") ready();
     });
-    return () => subscription.unsubscribe();
+
+    const params = new URLSearchParams(
+      typeof window === "undefined" ? "" : window.location.hash.replace(/^#/, ""),
+    );
+    const access_token  = params.get("access_token");
+    const refresh_token = params.get("refresh_token");
+    // `type=recovery` is what distinguishes "arrived from a reset email" from
+    // "already signed in and navigated here". Without that check, an attacker at
+    // an unlocked, logged-in browser could set a new password without knowing the
+    // current one — so a bare visit must NOT be treated as a verified link.
+    const isRecovery = params.get("type") === "recovery";
+
+    if (isRecovery && access_token && refresh_token) {
+      supabase.auth
+        .setSession({ access_token, refresh_token })
+        .then(({ error }) => {
+          if (error) fail();
+          else {
+            // Drop the tokens from the address bar once they're exchanged, so a
+            // copied URL, a shared screen, or the browser history doesn't carry a
+            // live credential.
+            window.history.replaceState(null, "", window.location.pathname);
+            ready();
+          }
+        })
+        .catch(fail);
+    } else {
+      // Supabase also supports a `?code=` PKCE variant that /auth/callback
+      // exchanges before redirecting here; in that case a session already
+      // exists and there is no fragment to read.
+      supabase.auth.getSession().then(({ data }) => {
+        if (data.session && params.get("code")) ready();
+        else fail();
+      });
+    }
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -61,6 +120,30 @@ export default function ResetPasswordPage() {
       setStatus("done");
       setTimeout(() => router.push("/portal"), 2000);
     }
+  }
+
+  // A bad or expired link has to be a dead end with a way out, not a spinner.
+  // This is the branch that was unreachable before: the page could only ever be
+  // "verifying" or "verified", so a link that didn't verify spun forever.
+  if (!sessionReady && status === "error") {
+    return (
+      <div className="min-h-screen bg-off-white flex items-start justify-center px-4">
+        <div className="max-w-sm mx-auto mt-16 w-full p-8 bg-white dark:bg-portal-card border border-line rounded-lg shadow-sm text-center">
+          <div className="font-display text-2xl text-black dark:text-ink tracking-tight">
+            {profile.logoText} &bull; {profile.cityName.toUpperCase()}
+          </div>
+          <p className="text-sm text-danger bg-danger-light border border-danger-border rounded px-3 py-2 mt-6">
+            {errorMsg}
+          </p>
+          <Link
+            href="/portal/forgot-password"
+            className="mt-6 block w-full py-2.5 bg-black text-white dark:bg-yellow dark:text-black rounded font-semibold text-sm hover:bg-near-black dark:hover:bg-yellow-deep transition-colors"
+          >
+            Request a new link
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   if (!sessionReady) {
