@@ -150,9 +150,16 @@ export default async function Footer() {
           </Link>
         </span>
         <span>
-          {contact.address},{" "}
-          {contact.city}, {contact.state}{" "}
-          {contact.zip}
+          Sitio creado por{" "}
+          <a
+            href="https://silverwolflabs.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-white/40 hover:text-white/70 transition-colors"
+          >
+            Silver Wolf Labs
+          </a>{" "}
+          — San José, CR | Dallas, TX
         </span>
       </div>
     </footer>

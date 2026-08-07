@@ -51,3 +51,4 @@ supabase/.temp/
 
 # Internal planning docs — not part of the shipped product
 /docs/
+.env*
