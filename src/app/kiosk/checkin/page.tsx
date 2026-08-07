@@ -750,7 +750,11 @@ export default function KioskCheckinPage() {
                 )}
 
                 <p className="text-white/20 text-sm mt-8">
-                  Resetting in {resetCountdown ?? Math.ceil(RESET_DELAY_SUCCESS_MS / 1000)}s…
+                  {/* Fallback must match the delay the effect actually picked, or
+                      the first frame reads "5s" and then jumps up to 9. */}
+                  Resetting in {resetCountdown ?? Math.ceil(
+                    (awardedBadges.length > 0 ? RESET_DELAY_BADGE_MS : RESET_DELAY_SUCCESS_MS) / 1000
+                  )}s…
                 </p>
                 <button onClick={reset} className="mt-4 text-white/40 hover:text-white/70 text-sm transition-colors">
                   Check in another member
