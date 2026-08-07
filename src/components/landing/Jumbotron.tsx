@@ -32,7 +32,7 @@ async function getHeroSettings(): Promise<Record<string, string>> {
 export default async function Jumbotron() {
   const [s, profile] = await Promise.all([getHeroSettings(), getGymProfile()]);
 
-  const eyebrow      = s.hero_eyebrow          ?? "Pinares · Curridabat · Costa Rica";
+  const eyebrow      = s.hero_eyebrow          ?? "San Diego · Cartago · Costa Rica";
   const subTagline   = s.hero_sub_tagline      ?? profile.tagline;
   const statLeftNum  = s.hero_stat_left_num    ?? "12+";
   const statLeftLbl  = s.hero_stat_left_label  ?? "Clases por semana";

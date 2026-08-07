@@ -23,6 +23,7 @@ export interface GymProfile {
     phone: string;
     phoneHref: string;
     email: string;
+    wazeUrl: string;
   };
 }
 
@@ -42,17 +43,17 @@ export const DEFAULT_GYM_PROFILE: GymProfile = {
   shortName: "Soul JJ",
   logoText: "SOUL",
   logoDot: "\u2022",
-  cityName: "Curridabat",
+  cityName: "San Diego",
   tagline: "Jiu jitsu para el alma. Formamos personas fuertes dentro y fuera del tatami.",
   timezone: "America/Costa_Rica",
   affiliateText:
-    "Jiu jitsu integral en Pinares de Curridabat. Un espacio 100% seguro, inclusivo y respetuoso. Afiliados a Sektor Jiu-Jitsu.",
+    "Jiu jitsu integral en San Diego de Cartago. Un espacio 100% seguro, inclusivo y respetuoso. Afiliados a Sektor Jiu-Jitsu.",
   footerTags: ["Gi", "No-Gi", "Kids", "Open Mat"],
   joinButtonText: "Únete a Soul",
   meta: {
-    title: "Soul Jiu Jitsu | Jiu Jitsu en Curridabat, Costa Rica",
+    title: "Soul Jiu Jitsu | Jiu Jitsu en San Diego, Cartago, Costa Rica",
     description:
-      "Entrena jiu jitsu en Soul Jiu Jitsu, Pinares de Curridabat. Clases de Gi, No-Gi, kids y open mats en un espacio seguro, inclusivo y respetuoso.",
+      "Entrena jiu jitsu en Soul Jiu Jitsu, San Diego de Cartago. Clases de Gi, No-Gi, kids y open mats en un espacio seguro, inclusivo y respetuoso.",
     url: "http://localhost:3000",
   },
   social: {
@@ -60,15 +61,16 @@ export const DEFAULT_GYM_PROFILE: GymProfile = {
     instagramHandle: "",
   },
   contact: {
-    address: "Pinares",
-    city: "Curridabat",
-    state: "San José",
-    zip: "11802",
+    address: "Cola de Gallo Comida Mexicana & Mixology Cocktails",
+    city: "San Diego",
+    state: "Cartago",
+    zip: "",
     // Sin teléfono público por ahora — los componentes ocultan la fila
     // cuando está vacío. Se configura vía site_settings (contact_phone).
     phone: "",
     phoneHref: "",
     email: "admin@silverwolflabs.com",
+    wazeUrl: "https://waze.com/ul/hd1u227fcp",
   },
 };
 
@@ -96,6 +98,7 @@ const KEY_MAP: Record<string, (p: GymProfile, v: string) => void> = {
   contact_zip:           (p, v) => { p.contact.zip = v; },
   contact_phone:         (p, v) => { p.contact.phone = v; p.contact.phoneHref = `tel:${v.replace(/\D/g, "")}`; },
   contact_email:         (p, v) => { p.contact.email = v; },
+  contact_waze_url:      (p, v) => { p.contact.wazeUrl = v; },
 };
 
 // ── Loader (server-side only) ───────────────────────────────────────────────

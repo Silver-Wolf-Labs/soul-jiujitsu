@@ -2,12 +2,13 @@
 -- Soul Jiu Jitsu — rediseño completo del sitio público.
 --
 -- Resiembra el contenido del CMS con la identidad real de la academia
--- (Pinares, Curridabat, Costa Rica): tema visual "soul" (negro + dorado),
+-- (San Diego, Cartago, Costa Rica): tema visual "soul" (negro + dorado),
 -- textos en español, horario real (Gi / No-Gi / Kids / open mats), reglas
 -- del mat, misión/visión y planes en colones.
 --
--- Los montos de membership_plans son PROVISIONALES — edítalos desde
--- /admin/membership-plans con los precios reales.
+-- Precios de adultos (3 clases/semana, ilimitado, visitante/drop-in) son los
+-- reales confirmados por el gym. Kids sigue siendo PROVISIONAL — edítalo
+-- desde /admin/membership-plans con el precio real.
 -- ═════════════════════════════════════════════════════════════════════════
 
 -- ── 1. Identidad + tema + hero (site_settings) ─────────────────────────────
@@ -18,16 +19,16 @@ INSERT INTO site_settings (key, value) VALUES
   ('gym_name',              'Soul Jiu Jitsu'),
   ('gym_short_name',        'Soul JJ'),
   ('gym_logo_text',         'SOUL'),
-  ('gym_city_name',         'Curridabat'),
+  ('gym_city_name',         'San Diego'),
   ('gym_tagline',           'Jiu jitsu para el alma. Formamos personas fuertes dentro y fuera del tatami.'),
   ('gym_timezone',          'America/Costa_Rica'),
-  ('gym_affiliate_text',    'Jiu jitsu integral en Pinares de Curridabat. Un espacio 100% seguro, inclusivo y respetuoso. Afiliados a Sektor Jiu-Jitsu.'),
+  ('gym_affiliate_text',    'Jiu jitsu integral en San Diego de Cartago. Un espacio 100% seguro, inclusivo y respetuoso. Afiliados a Sektor Jiu-Jitsu.'),
   ('gym_footer_tags',       'Gi,No-Gi,Kids,Open Mat'),
   ('gym_join_button_text',  'Únete a Soul'),
-  ('gym_meta_title',        'Soul Jiu Jitsu | Jiu Jitsu en Curridabat, Costa Rica'),
-  ('gym_meta_description',  'Entrena jiu jitsu en Soul Jiu Jitsu, Pinares de Curridabat. Clases de Gi, No-Gi, kids y open mats en un espacio seguro, inclusivo y respetuoso.'),
+  ('gym_meta_title',        'Soul Jiu Jitsu | Jiu Jitsu en San Diego, Cartago, Costa Rica'),
+  ('gym_meta_description',  'Entrena jiu jitsu en Soul Jiu Jitsu, San Diego de Cartago. Clases de Gi, No-Gi, kids y open mats en un espacio seguro, inclusivo y respetuoso.'),
 
-  ('hero_eyebrow',          'Pinares · Curridabat · Costa Rica'),
+  ('hero_eyebrow',          'San Diego · Cartago · Costa Rica'),
   ('hero_sub_tagline',      'Enseñamos jiu jitsu de manera integral, promoviendo el bienestar físico y mental de cada alumno — en un espacio 100% seguro, inclusivo y respetuoso.'),
   ('hero_stat_left_num',    '12+'),
   ('hero_stat_left_label',  'Clases por semana'),
@@ -36,7 +37,14 @@ INSERT INTO site_settings (key, value) VALUES
   ('hero_stat_wide_num',    'Gi · No-Gi · Kids · Open Mat'),
   ('hero_stat_wide_label',  'Modalidades'),
 
-  ('contact_state',         'San José'),
+  -- El gym entrena dentro de Cola de Gallo (restaurante/bar) en San Diego de
+  -- Cartago — no tiene un local propio con dirección postal formal, así que
+  -- el enlace de Waze es la forma confiable de llegar.
+  ('contact_address',       'Cola de Gallo Comida Mexicana & Mixology Cocktails'),
+  ('contact_city',          'San Diego'),
+  ('contact_state',         'Cartago'),
+  ('contact_zip',           ''),
+  ('contact_waze_url',      'https://waze.com/ul/hd1u227fcp'),
   -- Sin teléfono público por ahora: cadena vacía = la UI oculta la fila.
   ('contact_phone',         ''),
   ('contact_hours',         '[{"days":"Lunes a jueves","hours":"6:00 a. m. y 7:00 p. m."},{"days":"Lunes (kids)","hours":"5:00 p. m."},{"days":"Viernes","hours":"7:00 p. m. — open mat Gi"},{"days":"Sábado","hours":"9:30 a. m. kids · 12:00 m. d. open mat No-Gi"}]')
@@ -201,23 +209,39 @@ INSERT INTO membership_plans
    highlight, highlight_label, highlight_color, cta_label, cta_href,
    display_order, visible, period_display)
 VALUES
-  ('Adultos',
+  ('3 clases/semana',
+   'Membresía mensual — hasta 3 clases por semana, Gi y No-Gi',
+   2500000, 'month', 0, 'active',
+   '["Hasta 3 clases por semana","Gi y No-Gi","Open mats incluidos","Sin contrato"]'::jsonb,
+   FALSE, NULL, NULL, 'Quiero empezar', '/join',
+   1, TRUE, '/mes'),
+
+  ('Ilimitado',
    'Membresía mensual ilimitada — Gi y No-Gi',
-   4000000, 'month', 0, 'active',
+   3500000, 'month', 0, 'active',
    '["Gi y No-Gi ilimitado","Open mats incluidos","Horarios de 6:00 a. m. y 7:00 p. m.","Sin contrato"]'::jsonb,
    TRUE, 'Más popular', 'yellow', 'Quiero empezar', '/join',
-   1, TRUE, '/mes'),
+   2, TRUE, '/mes'),
 
   ('Kids',
    'Programa infantil — lunes y sábados',
    3000000, 'month', 0, 'active',
    '["Lunes 5:00 p. m. y sábados 9:30 a. m.","Disciplina, respeto y confianza","Ambiente seguro y divertido"]'::jsonb,
    FALSE, NULL, NULL, 'Inscribir a mi peque', '/join',
-   2, TRUE, '/mes'),
+   3, TRUE, '/mes'),
 
   ('Visitante',
    'Drop-in — entrena con nosotros de paso por Costa Rica',
-   1000000, 'month', 0, 'active',
+   500000, 'month', 0, 'active',
    '["Válido para cualquier clase del día","Gi o No-Gi","Practicantes visitantes bienvenidos"]'::jsonb,
    FALSE, NULL, NULL, 'Escríbenos', '/#contact',
-   3, TRUE, 'por clase');
+   4, TRUE, 'por clase');
+
+-- ── 9. Equipo ────────────────────────────────────────────────────────────
+
+DELETE FROM team;
+
+INSERT INTO team (name, role, belt, bio, slug, "order", type, active, visible_on_public_team) VALUES
+  ('Luis Tristán', 'Profesor principal', 'black',
+   'Cinta negra y profesor principal de Soul Jiu Jitsu. Lidera cada clase con técnica, paciencia y respeto por el arte.',
+   'luis-tristan', 0, 'head_coach', TRUE, TRUE);

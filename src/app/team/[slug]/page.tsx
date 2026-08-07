@@ -14,7 +14,7 @@ import type { TeamMember } from "@/lib/supabase/types";
 
 // Fallback data for when Supabase isn't connected
 const FALLBACK_TEAM: TeamMember[] = [
-  { id: 1, name: "Profesor Soul", role: "Profesor principal", belt: BeltColor.Black, bio: "Lidera cada clase con técnica, paciencia y respeto. Muy pronto conocerás aquí a todo el equipo.", photo_url: null, slug: "head-coach", order: 0, type: TeamMemberType.HeadCoach, active: true, visible_on_public_team: true, visible_until: null },
+  { id: 1, name: "Luis Tristán", role: "Profesor principal", belt: BeltColor.Black, bio: "Cinta negra y profesor principal de Soul Jiu Jitsu. Lidera cada clase con técnica, paciencia y respeto.", photo_url: null, slug: "luis-tristan", order: 0, type: TeamMemberType.HeadCoach, active: true, visible_on_public_team: true, visible_until: null },
 ];
 
 export default async function TeamMemberPage({

@@ -13,6 +13,7 @@ interface LocationData {
   zip: string;
   phone: string;
   email: string;
+  wazeUrl: string;
   hours: HourRow[];
   mapEmbed: string;
   displayTitle: string;
@@ -28,6 +29,7 @@ async function getLocationData(): Promise<LocationData> {
     zip: profile.contact.zip,
     phone: profile.contact.phone,
     email: profile.contact.email,
+    wazeUrl: profile.contact.wazeUrl,
     hours: [],
     mapEmbed: "",
     displayTitle: "Ubicación y contacto",
@@ -40,6 +42,7 @@ async function getLocationData(): Promise<LocationData> {
       supabase.from("site_settings").select("key,value").in("key", [
         "contact_address", "contact_city", "contact_state", "contact_zip",
         "contact_phone", "contact_email", "contact_hours", "contact_map_embed",
+        "contact_waze_url",
       ]),
       supabase.from("site_sections").select("display_title,display_subtitle").eq("key", "contact").single(),
     ]);
@@ -53,6 +56,7 @@ async function getLocationData(): Promise<LocationData> {
       if (get("contact_phone")) defaults.phone = get("contact_phone")!;
       if (get("contact_email")) defaults.email = get("contact_email")!;
       if (get("contact_map_embed")) defaults.mapEmbed = get("contact_map_embed")!;
+      if (get("contact_waze_url")) defaults.wazeUrl = get("contact_waze_url")!;
       const hoursRaw = get("contact_hours");
       if (hoursRaw) {
         try { defaults.hours = JSON.parse(hoursRaw); } catch { /* keep default */ }
@@ -72,8 +76,8 @@ async function getLocationData(): Promise<LocationData> {
 export default async function LocationContact() {
   const loc = await getLocationData();
 
-  const fullAddress = `${loc.address}, ${loc.city}, ${loc.state} ${loc.zip}`;
-  const mapsNavHref = `https://maps.google.com/maps?daddr=${encodeURIComponent(fullAddress)}`;
+  const fullAddress = [loc.address, loc.city, loc.state, loc.zip].filter(Boolean).join(", ");
+  const navHref = loc.wazeUrl || `https://maps.google.com/maps?daddr=${encodeURIComponent(fullAddress)}`;
   const phoneHref = `tel:${loc.phone.replace(/\D/g, "")}`;
 
   return (
@@ -107,7 +111,7 @@ export default async function LocationContact() {
           <div className="divide-y divide-line">
             {/* Address — tappable, opens navigation */}
             <a
-              href={mapsNavHref}
+              href={navHref}
               target="_blank"
               rel="noopener noreferrer"
               className="flex gap-3 items-start px-5 py-3.5 hover:bg-off-white transition-colors group"
@@ -119,9 +123,11 @@ export default async function LocationContact() {
                 <div className="text-[11px] text-muted font-semibold tracking-[0.06em] uppercase mb-1">Dirección</div>
                 <div className="text-[14px] text-ink group-hover:text-blue-mid transition-colors">
                   {loc.address}<br />
-                  {loc.city}, {loc.state} {loc.zip}
+                  {loc.city}, {loc.state}{loc.zip ? ` ${loc.zip}` : ""}
                 </div>
-                <div className="text-[11px] text-muted mt-1 inline-flex items-center gap-0.5">Toca para ver cómo llegar <ArrowUpRight className="w-3 h-3" /></div>
+                <div className="text-[11px] text-muted mt-1 inline-flex items-center gap-0.5">
+                  {loc.wazeUrl ? "Toca para abrir en Waze" : "Toca para ver cómo llegar"} <ArrowUpRight className="w-3 h-3" />
+                </div>
               </div>
             </a>
 
