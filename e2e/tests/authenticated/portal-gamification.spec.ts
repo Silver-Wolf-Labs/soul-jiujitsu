@@ -1,5 +1,6 @@
 import { test, expect, waitForStableLayout } from "../../support/fixtures";
 import { MEMBER_CREDS, loginAsMember, missingCredsReason } from "../../support/auth";
+import { t, tFormat, tRegex, pluralOptions, rx } from "../../support/messages";
 
 /**
  * Gamification surfaces in the member portal: the XP bar, the training-day
@@ -63,14 +64,24 @@ test.describe("portal gamification", () => {
 
     // aria-label is the one place both numbers appear together, so it's the
     // cheapest way to read the level without coupling to layout.
+    // Pattern built from the catalogue entry, not written out here. The hard-coded
+    // /Level (\d+): (\d+) of (\d+) XP/ stopped matching the moment the portal
+    // became Spanish, and reading the numbers by placeholder name rather than by
+    // position means a translation that reorders them still works.
+    const { pattern, names } = tRegex("portal.xp.progressLabel");
     const label = (await bar.getAttribute("aria-label")) ?? "";
-    const m = label.match(/Level (\d+): (\d+) of (\d+) XP/);
-    expect(m, `Progressbar aria-label didn't match the expected shape: "${label}"`).not.toBeNull();
+    const m = label.match(pattern);
+    expect(
+      m,
+      `Progressbar aria-label "${label}" does not match portal.xp.progressLabel ` +
+        `(${pattern.source}). Either the label is built from different copy or the ` +
+        `catalogue entry changed shape.`
+    ).not.toBeNull();
 
-    const [, levelStr, intoStr, forStr] = m!;
-    const level = Number(levelStr);
-    const into = Number(intoStr);
-    const forLevel = Number(forStr);
+    const group = (name: string) => Number(m![1 + names.indexOf(name)]);
+    const level = group("level");
+    const into = group("into");
+    const forLevel = group("total");
 
     expect(level, "Level is below 1. Every member starts at level 1, even with 0 XP.")
       .toBeGreaterThanOrEqual(1);
@@ -81,11 +92,15 @@ test.describe("portal gamification", () => {
     // current level + 1 — an off-by-one here is very visible to the member.
     const remaining = forLevel - into;
     if (remaining > 0) {
+      const expected = tFormat("portal.xp.toNextLevel", {
+        remaining,
+        level: level + 1,
+      });
       expect(
         body,
-        `Expected the card to offer "${remaining} XP to level ${level + 1}" given ` +
-          `${into}/${forLevel} at level ${level}.`
-      ).toContain(`${remaining} XP to level ${level + 1}`);
+        `Expected the card to offer "${expected}" given ${into}/${forLevel} at ` +
+          `level ${level}.`
+      ).toContain(expected);
     }
   });
 
@@ -96,18 +111,25 @@ test.describe("portal gamification", () => {
     const body = await page.locator("body").innerText();
 
     // Without this line, a member who trained Fri and Mon sees a streak of 2 and
-    // assumes it's broken counting. The copy is load-bearing, not decoration.
+    // assumes it's broken counting. The copy is load-bearing, not decoration —
+    // which is why the assertion is that the catalogue's sentence is on the page,
+    // rather than a hand-written /sundays? don'?t break it/ that only ever
+    // described the English.
     expect(
       body,
       "The streak card no longer explains that Sundays don't break the streak. " +
         "Members will read the gap as a counting bug."
-    ).toMatch(/sundays? don'?t break it/i);
+    ).toContain(t("portal.streak.sundaysDontCount"));
 
+    // Plural message, so either form is acceptable: the test account's streak
+    // changes whenever somebody checks in on staging, and asserting on the count
+    // would make this fail on a working portal.
+    const dayUnits = pluralOptions("portal.streak.days");
     expect(
       body,
-      "The streak card is missing its 'training days' unit label — a bare number " +
-        "is ambiguous between days, weeks and classes (the portal shows all three)."
-    ).toMatch(/training days?/i);
+      `The streak card is missing its unit label (${dayUnits.join(" / ")}) — a bare ` +
+        "number is ambiguous between days, weeks and classes (the portal shows all three)."
+    ).toMatch(new RegExp(dayUnits.map(rx).join("|")));
   });
 
   test("the two streak figures on the page are labelled distinctly", async ({ page }) => {
@@ -121,15 +143,16 @@ test.describe("portal gamification", () => {
     // different values under one label reads as a bug in the app.
     //
     // Asserting the tile's disambiguated label rather than the absence of a bare
-    // "STREAK": the StreakCard's own heading legitimately renders as "STREAK"
+    // "RACHA": the StreakCard's own heading legitimately renders as "RACHA"
     // (it's `uppercase` in CSS, and innerText reflects text-transform), so a
     // negative match would fail on correct markup.
+    const tileLabel = t("portal.stats.weekStreak");
     expect(
       body,
-      "The weekly stats tile is no longer labelled 'WEEK STREAK'. It sits on the same " +
+      `The weekly stats tile is no longer labelled "${tileLabel}". It sits on the same ` +
         "page as the training-day streak card, so an ambiguous label puts two " +
         "different numbers under the same name."
-    ).toMatch(/WEEK STREAK/i);
+    ).toContain(tileLabel);
   });
 
   test("badge grid renders with coherent earned/total counters", async ({ page, assertNoProblems }) => {
@@ -138,22 +161,38 @@ test.describe("portal gamification", () => {
 
     // Scope to the Achievements card. A page-wide regex for "N/M" would also
     // catch dates and any other slashed number elsewhere in the portal.
-    const grid = page.locator("div").filter({ has: page.getByRole("heading", { name: "Achievements" }) }).last();
+    // Walk up from the heading rather than filtering divs by containment. Every
+    // ancestor div "contains" the heading, so `.last()` resolved to the innermost
+    // one — the heading row, which holds the title and the counter and none of the
+    // badges, and reported "no category headings" about markup that could not have
+    // had any. `.first()` would swing the other way and match a page-level wrapper,
+    // losing the scoping this test wants. Two steps up from the h2 is the card
+    // itself: h2 → heading row → card (see BadgeGrid).
+    const heading = t("portal.badges.heading");
+    const grid = page.getByRole("heading", { name: heading }).locator("../..");
     await expect(
       grid,
-      "No Achievements card in the portal. BadgeGrid returns null when every category " +
+      `No "${heading}" card in the portal. BadgeGrid returns null when every category ` +
         "is empty, so this also fires if getOwnBadges() came back empty."
     ).toBeVisible({ timeout: 20_000 });
 
     const text = await grid.innerText();
 
     // At least one category heading proves the grid grouped rather than rendering
-    // one undifferentiated wall.
+    // one undifferentiated wall. Categories come from the catalogue (the badge
+    // *names* are the gym's, the groupings are the system's), so they are read from
+    // it rather than pasted — a renamed category should not read as a broken grid.
+    const categories = ["milestone", "consistency", "modality", "skill", "community"].map(
+      (c) => t(`portal.badges.categories.${c}`)
+    );
+    // Case-insensitive: the category headings are `uppercase` in CSS and innerText
+    // reflects text-transform, so the page reads "HITOS" where the catalogue says
+    // "Hitos". Matching case here would assert on a stylesheet, not on the copy.
     expect(
       text,
-      "No badge category headings (Hitos/Constancia/Estilos/Técnica/Comunidad) inside " +
-        "the Achievements card."
-    ).toMatch(/Hitos|Constancia|Estilos|Técnica|Comunidad/);
+      `No badge category headings (${categories.join("/")}) inside the ` +
+        `"${heading}" card.`
+    ).toMatch(new RegExp(categories.map(rx).join("|"), "i"));
 
     const counts = text.match(/\d+\s*\/\s*\d+/g) ?? [];
     expect(

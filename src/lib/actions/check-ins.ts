@@ -153,7 +153,15 @@ export async function unlockKiosk(pin: string): Promise<{ ok: boolean; error?: s
   if (logoutOnUnlock) {
     try {
       const userClient = createClient();
-      await userClient.auth.signOut();
+      // `scope: "local"` matters. supabase-js defaults `signOut()` to
+      // "global", which revokes every refresh token the user holds — so
+      // unlocking the front-desk tablet would also sign the coach out of
+      // their own phone and laptop, mid-session, with no explanation. What
+      // this setting is for is clearing the session *on this device*, and
+      // "local" is exactly that: it deletes the cookies this request owns
+      // and leaves other devices alone. Nothing is lost defensively —
+      // middleware blocks /admin on any device holding a kiosk_token.
+      await userClient.auth.signOut({ scope: "local" });
     } catch (signOutErr) {
       // Non-fatal — the kiosk unlock succeeded, the middleware block still
       // protects /admin access on this device even if the cookie lingers.

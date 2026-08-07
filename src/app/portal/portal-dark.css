@@ -28,6 +28,12 @@
  * muted-on-tile at 7.3:1, well past WCAG AA's 4.5:1 for body text. Surface
  * separation is deliberately low (card-on-page ≈ 1.07:1) because it carries no
  * information — borders do that work.
+ *
+ * One surface escaped that audit: text inputs set neither a colour nor a
+ * background, so they inherited body's near-black over the field background the
+ * UA derives from `color-scheme: dark` — 1.55:1, and invisible to type into. The
+ * override lives in globals.css rather than here, because its specificity has to
+ * be tuned against Tailwind's preflight and utilities; see the comment there.
  */
 
 /* Light-mode fallback for the card token. `portal-card` is only ever used behind

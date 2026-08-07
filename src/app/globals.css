@@ -38,6 +38,101 @@
     background: var(--color-yellow);
     color: #171204;
   }
+
+  /* ── Portal dark-theme form controls ──────────────────────────────────────
+     Every text input in the portal is written as
+     `border border-line rounded px-3 py-2 text-sm` — no `text-*`, no `bg-*` —
+     because on the light theme inheriting black-on-white is exactly right. In
+     the dark theme that inheritance is the bug: the field inherits `#1a1a1a`
+     from body, while `color-scheme: dark` (portal/portal-dark.css) makes the UA
+     paint its background `#3b3b3b`. Dark grey on mid grey is 1.55:1 — axe
+     flagged it as a serious violation on /portal/login and
+     /portal/forgot-password, and what a member sees is their own email fading
+     out as they type it.
+
+     Fixed centrally rather than at the call sites because it is not two pages:
+     the same class string is on the login, forgot-password, reset-password and
+     profile fields, so the text is unreadable everywhere a member types, and the
+     next input somebody adds would inherit the bug too.
+
+     It sits in this file rather than beside the palette it belongs to only
+     because `@layer base` needs `@tailwind base` in the same PostCSS pass — an
+     `@layer` inside the imported file fails the build outright.
+
+     The specificity is tuned to exactly 0,0,1 and that is load-bearing. It has
+     to land between two rules:
+
+       - ABOVE preflight's `input,optgroup,select,textarea { color: inherit }`,
+         which is 0,0,1 and is what pulls body's near-black in. Same specificity
+         means source order decides, and this rule is later, so it wins.
+       - BELOW a Tailwind utility's 0,1,0, so a field that styles itself keeps
+         doing so — the profile's locked email input is `bg-off-white text-muted
+         cursor-not-allowed`, and repainting it would make a read-only control
+         look editable.
+
+     Hence the split: the `input`/`textarea`/`select` element names sit outside
+     `:where()` to contribute their one point, while the theme attribute and the
+     type filter sit inside it and contribute nothing. Two earlier attempts got
+     this wrong and are worth not repeating — `[data-portal-theme="dark"] :is(…)`
+     is 0,2,1 and clobbered the locked field, and wrapping the whole thing in
+     `:where()` is 0,0,0, which loses to preflight and changes nothing at all.
+
+     `@layer base` does not help: Tailwind 3's `@layer` is a build-time ordering
+     directive it strips during compilation, not a native CSS cascade layer, so
+     specificity still decides. Both wrong versions were caught by reading the
+     computed colours out of the built stylesheet rather than by eye.
+
+     `paper` is the field surface, matching the inset tiles the portal already
+     uses for recessed content (13.9:1 against `ink`). Placeholders get `muted`
+     at 7.3:1 — WCAG does not exempt placeholder text, and they were inheriting
+     the same unreadable grey.
+
+     Scoped to text-entry types on purpose: checkboxes, radios and range sliders
+     are painted by the UA from `color-scheme` and already render correctly, and
+     giving them a background here would flatten them into grey squares. */
+  :where([data-portal-theme="dark"]) :is(
+    input:where(
+      [type="text"],
+      [type="email"],
+      [type="password"],
+      [type="tel"],
+      [type="number"],
+      [type="search"],
+      [type="url"],
+      [type="date"],
+      [type="time"],
+      [type="datetime-local"],
+      :not([type])
+    ),
+    textarea,
+    select
+  ) {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+  }
+
+  :where([data-portal-theme="dark"]) :where(input, textarea)::placeholder {
+    color: var(--color-muted);
+    /* Chromium multiplies its own placeholder opacity over the colour, which
+       would drop the computed contrast back below 4.5:1. */
+    opacity: 1;
+  }
+
+  /* Autofill is painted by the browser with `!important`, so the rule above
+     cannot reach it — an autofilled email would show as Chromium's pale-blue
+     block with near-black text on the dark card. The inset shadow is the
+     standard workaround: it repaints over the UA background, which is not
+     itself overridable.
+
+     Deliberately NOT wrapped in `:where()` like the rule above. There is no
+     utility to defer to here: `bg-*` cannot override an autofilled background
+     either, so zeroing the specificity would just leave the browser's pale blue
+     in place. */
+  [data-portal-theme="dark"] :is(input, textarea, select):-webkit-autofill {
+    -webkit-text-fill-color: var(--color-ink);
+    -webkit-box-shadow: 0 0 0 1000px var(--color-paper) inset;
+    caret-color: var(--color-ink);
+  }
 }
 
 /* Analytics loading state — PeriodBar flips

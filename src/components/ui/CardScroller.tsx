@@ -157,20 +157,47 @@ export default function CardScroller({
         </button>
       )}
 
-      {/* Dot indicators (mobile only, when carousel active) */}
+      {/*
+        Dot indicators (mobile only, when carousel active).
+
+        The painted dot and the tappable target are deliberately different sizes.
+        A 6px dot is the design — bigger reads as a control to press rather than a
+        position hint — but a 6px *target* fails WCAG 2.2 SC 2.5.8 (24x24 minimum)
+        and is genuinely hard to hit with a thumb. So the dot moves into a span and
+        the <button> around it carries 10px of padding, giving a 26x26 hit box that
+        paints nothing.
+
+        Two details make that invisible rather than a layout shift:
+
+        - `-my-2.5` cancels only the *vertical* padding, so the row's outer height
+          is still the 6px of the dot itself and nothing below it moves. The hit box
+          still reaches 10px above and below into the `mt-3` gap, which is empty.
+        - The horizontal padding is *not* cancelled, and the container's old
+          `gap-1.5` is gone because the padding now supplies the spacing. This is
+          the one intentional visual change: dot centres sit 26px apart instead of
+          12px. Cancelling it with a negative margin would keep the row pixel-identical
+          but make each button's hit box overlap its neighbours' dots, so the right
+          half of every dot would scroll to the wrong card — a 24x24 rect that only
+          satisfies the measurement. 26px pitch is also what SC 2.5.8's own spacing
+          exception asks for, so the row is conformant on both readings.
+      */}
       {isCarousel && childCount > 1 && (
-        <div className="flex justify-center gap-1.5 mt-3 nav:hidden">
+        <div className="flex items-center justify-center mt-3 nav:hidden">
           {Array.from({ length: childCount }, (_, i) => (
             <button
               key={i}
               onClick={() => scrollToIndex(i)}
-              className={`h-1.5 rounded-full transition-all duration-200 ${
-                i === activeIndex
-                  ? "w-5 bg-black"
-                  : "w-1.5 bg-black/20 hover:bg-black/40"
-              }`}
+              className="group flex items-center justify-center p-2.5 -my-2.5"
               aria-label={`Go to card ${i + 1}`}
-            />
+            >
+              <span
+                className={`block h-1.5 rounded-full transition-all duration-200 ${
+                  i === activeIndex
+                    ? "w-5 bg-black"
+                    : "w-1.5 bg-black/20 group-hover:bg-black/40"
+                }`}
+              />
+            </button>
           ))}
         </div>
       )}

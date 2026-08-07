@@ -1,3 +1,5 @@
+import { t } from "./messages";
+
 /**
  * Single source of truth for what routes exist and how they should behave.
  *
@@ -50,10 +52,14 @@ export const PUBLIC_ROUTES: RouteSpec[] = [
     dataDriven: true,
   },
   {
+    // From the catalogue, not a literal: the portal is Spanish now, so
+    // "Member Login" is no longer on the page and this assertion failed on
+    // chromium, mobile-chrome, webkit and a11y at once. Reading the real string
+    // means it also follows the next rewording. See support/messages.
     path: "/portal/login",
     name: "Member login",
     auth: "public",
-    expectText: "Member Login",
+    expectText: t("portal.login.subtitle"),
   },
   {
     path: "/portal/forgot-password",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Circle } from "lucide-react";
 import Link from "next/link";
@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useGymProfile } from "@/lib/gym-profile-context";
 import { createMemberProfile } from "@/lib/actions/auth";
 import { checkEmailDeliverability } from "@/lib/actions/email-deliverability";
-import Spinner, { SpinnerButton } from "@/components/ui/Spinner";
+import { SpinnerButton } from "@/components/ui/Spinner";
 import { BeltColor } from "@/lib/constants";
 import BeltEditor, { type BeltEditorValue } from "@/components/ui/BeltEditor";
 import {
@@ -27,8 +27,22 @@ interface WaiverTemplate {
   version: number;
 }
 
+/**
+ * The signed-in auth user, resolved server-side by `page.tsx`, or null for an
+ * anonymous visitor. Only the fields this form prefills — the names are
+ * best-effort (they come from the signUp metadata of the abandoned attempt) and
+ * may be empty strings.
+ */
+export interface ExistingUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+}
+
 interface Props {
   waiverTemplate: WaiverTemplate | null;
+  existingUser: ExistingUser | null;
 }
 
 // ── InlineSignaturePad ─────────────────────────────────────────────────────
@@ -154,7 +168,7 @@ function InlineSignaturePad({
   );
 }
 
-export default function JoinForm({ waiverTemplate }: Props) {
+export default function JoinForm({ waiverTemplate, existingUser }: Props) {
   const router = useRouter();
   const profile = useGymProfile();
   // Step 1 = personal info + password, Step 2 = waiver (if exists), Step 3 = training
@@ -188,8 +202,18 @@ export default function JoinForm({ waiverTemplate }: Props) {
   // So: if there's already a session, skip signUp entirely and use that user id.
   // create_member_profile_tx is idempotent on user_id, so this is also the safe
   // way to retry a signup that died after the auth user was created.
-  const [existingUserId, setExistingUserId] = useState<string | null>(null);
-  const [sessionChecked, setSessionChecked] = useState(false);
+  //
+  // This used to be state populated by a `supabase.auth.getSession()` effect,
+  // paired with a `sessionChecked` flag that held the whole card behind a
+  // spinner until the check landed. The gate was there for a real reason — the
+  // session decides whether password fields render and whether the email is
+  // locked, so painting the form first would flash a signup form at a member who
+  // is only here to finish their profile. The fix is not to drop the gate but to
+  // remove the need for one: `page.tsx` is already an async RSC, so it resolves
+  // the user before responding and hands it down. First paint is now correct by
+  // construction — no spinner, no flash, and the server HTML contains the real
+  // page instead of nothing.
+  const existingUserId = existingUser?.id ?? null;
 
   // Typo correction offered by the email gate ("did you mean gmail.com?").
   // `emailSuggestion` drives the prompt; `emailKeptAsTyped` records the address
@@ -202,10 +226,15 @@ export default function JoinForm({ waiverTemplate }: Props) {
   // are in flight, so the Next button can show progress instead of looking dead.
   const [checkingStep1, setCheckingStep1] = useState(false);
 
+  // Prefilled directly from the server-resolved user so the very first render is
+  // already correct. The email is also rendered read-only on this path: it
+  // identifies the session being completed, so an edit would either fail
+  // server-side (the RPC keys on user_id) or, worse, write a member row whose
+  // email doesn't match the account the member actually logs in with.
   const [form, setForm] = useState({
-    first_name: "",
-    last_name: "",
-    email: "",
+    first_name: existingUser?.firstName ?? "",
+    last_name: existingUser?.lastName ?? "",
+    email: existingUser?.email ?? "",
     phone: "",
     emergency_contact_name: "",
     emergency_contact_phone: "",
@@ -221,31 +250,6 @@ export default function JoinForm({ waiverTemplate }: Props) {
     belt_awarded_date: "",
     training_started_date: "",
   });
-
-  // Declared after `form` so the prefill can build on its initial state.
-  useEffect(() => {
-    const supabase = createClient();
-
-    (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user;
-
-      if (user) {
-        setExistingUserId(user.id);
-        // Prefill and lock the email: it identifies the session being completed,
-        // so an edit would either fail server-side (the RPC keys on user_id) or,
-        // worse, write a member row whose email doesn't match the account the
-        // member actually logs in with.
-        setForm((prev) => ({
-          ...prev,
-          email: user.email ?? prev.email,
-          first_name: prev.first_name || (user.user_metadata?.first_name as string) || "",
-          last_name:  prev.last_name  || (user.user_metadata?.last_name  as string) || "",
-        }));
-      }
-      setSessionChecked(true);
-    })();
-  }, []);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = e.target;
@@ -501,17 +505,12 @@ export default function JoinForm({ waiverTemplate }: Props) {
         <div className="h-1 w-full bg-gradient-to-r from-yellow to-blue-mid to-purple-light" />
 
         <div className="p-6 sm:p-8">
-          {/* Wait for the session check before rendering the form. It decides
-              whether the password fields exist and whether the email is locked,
-              so rendering first would flash a signup form at a member who is
-              only here to finish their profile — the exact confusion this whole
-              path is meant to remove. */}
-          {!sessionChecked ? (
-            <div className="py-16 flex justify-center">
-              <Spinner />
-            </div>
-          ) : (
-          <>
+          {/* No loading gate here on purpose. `existingUser` arrives as a prop
+              from the server, so everything below — the subtitle, whether the
+              password fields exist, whether the email is locked — is decided
+              before the first byte is sent. The previous spinner existed only to
+              hide a client-side session check; keeping it would now trade a
+              complete server-rendered page for a blank one. */}
           {/* Header */}
           <div className="text-center mb-6">
             <h1 className="font-display text-3xl text-black tracking-wider">
@@ -951,8 +950,6 @@ export default function JoinForm({ waiverTemplate }: Props) {
                 Inicia sesión
               </Link>
             </p>
-          )}
-          </>
           )}
         </div>
       </div>

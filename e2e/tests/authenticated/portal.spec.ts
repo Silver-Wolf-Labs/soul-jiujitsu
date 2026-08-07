@@ -1,5 +1,6 @@
 import { test, expect, waitForStableLayout } from "../../support/fixtures";
 import { MEMBER_CREDS, loginAsMember, missingCredsReason } from "../../support/auth";
+import { t } from "../../support/messages";
 
 /**
  * Member portal flows. Read-only: a nightly run must not mutate a real member's
@@ -83,7 +84,10 @@ test.describe("member portal", () => {
     await loginAsMember(page, MEMBER_CREDS!);
     await waitForStableLayout(page);
 
-    const signOut = page.getByRole("button", { name: /sign out|log out/i }).first();
+    // Name comes from the catalogue, not a literal: the portal is Spanish now, so
+    // /sign out|log out/ matched nothing and this failed as "no sign-out button"
+    // when the button was right there reading "Cerrar sesión". See support/messages.
+    const signOut = page.getByRole("button", { name: t("portal.nav.signOut") }).first();
     await expect(signOut, "No sign-out button in the portal nav").toBeVisible({ timeout: 20_000 });
     await signOut.click();
 

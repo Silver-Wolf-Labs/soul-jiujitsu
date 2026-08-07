@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { CheckInRow } from "@/lib/supabase/types";
 import { useIsMobile } from "@/lib/hooks/use-is-mobile";
 import { usePagination } from "@/lib/hooks/use-pagination";
+import { normalizeDayPeriod } from "@/lib/utils";
 import Pager from "@/components/ui/Pager";
 
 // ── Copy ──────────────────────────────────────────────────────────────────────
@@ -58,10 +59,15 @@ function formatCheckInDate(classDate: string, locale: string): string {
 
 function formatCheckInTime(checkedInAt: string, locale: string): string {
   try {
-    return new Date(checkedInAt).toLocaleTimeString(locale, {
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    // normalizeDayPeriod, not raw output: this row is server-rendered and then
+    // hydrated, and Node and Chromium disagree on the space inside Spanish
+    // "a. m." — enough to trip React's text-mismatch check. See the helper.
+    return normalizeDayPeriod(
+      new Date(checkedInAt).toLocaleTimeString(locale, {
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    );
   } catch {
     return "";
   }

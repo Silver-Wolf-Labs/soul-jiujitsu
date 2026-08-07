@@ -1,5 +1,5 @@
 import { test, expect, waitForStableLayout } from "../../support/fixtures";
-import { KIOSK_PIN, missingCredsReason, unlockKiosk } from "../../support/auth";
+import { ADMIN_CREDS, KIOSK_PIN, missingCredsReason, unlockKiosk } from "../../support/auth";
 
 /**
  * Kiosk check-in. This runs unattended on a tablet at the front desk, so a
@@ -7,7 +7,9 @@ import { KIOSK_PIN, missingCredsReason, unlockKiosk } from "../../support/auth";
  * to find out.
  *
  * The wrong-PIN test needs no credentials and always runs; the unlock flow needs
- * E2E_KIOSK_PIN and skips without it.
+ * E2E_KIOSK_PIN *and* the admin credentials, because unlocking is gated on an
+ * admin session before the PIN is even compared (`kiosk_require_admin`, on by
+ * default). It skips without them.
  */
 
 test.describe("kiosk PIN pad (no credentials needed)", () => {
@@ -105,7 +107,41 @@ test.describe("kiosk PIN pad (no credentials needed)", () => {
 });
 
 test.describe("kiosk check-in flow", () => {
-  test.skip(!KIOSK_PIN, missingCredsReason("E2E_KIOSK_PIN"));
+  /**
+   * Not parallel — these tests share one server-side resource and will knock
+   * each other over.
+   *
+   * `unlockKiosk` in `src/lib/actions/check-ins.ts` rotates a *single* row,
+   * `site_settings.kiosk_session_token`, on every successful unlock, and
+   * middleware validates each device's cookie against that one value. So the
+   * second unlock invalidates the first device's token: that device's next
+   * request fails `verify_kiosk_token` and gets bounced to /kiosk with no error
+   * message, because from middleware's point of view the cookie is simply
+   * stale. Run these three concurrently and two of them fail that way — the
+   * unlock genuinely worked and was then revoked by a sibling test.
+   *
+   * `mode: "default"` (rather than "serial") because the tests are independent:
+   * it disables parallelism inside this describe while still running every test
+   * even if an earlier one fails. "serial" would skip the rest and hide a second
+   * real regression behind the first.
+   *
+   * Worth knowing this mirrors a production constraint, not just a test
+   * artefact: a gym running two tablets has the same problem, where unlocking
+   * the second one silently kicks the first back to the PIN screen. Fixing that
+   * means per-device tokens, which is a schema change and out of scope here.
+   */
+  test.describe.configure({ mode: "default" });
+
+  /**
+   * Needs the admin credentials as well as the PIN: `kiosk_require_admin`
+   * defaults to on, so unlocking is a two-gate flow (staff logs in, then the PIN
+   * is entered). Without ADMIN_CREDS this suite would fail on the admin gate
+   * rather than skip, which is the false alarm that gets a nightly muted.
+   */
+  test.skip(
+    !KIOSK_PIN || !ADMIN_CREDS,
+    missingCredsReason("E2E_KIOSK_PIN", "E2E_ADMIN_EMAIL", "E2E_ADMIN_PASSWORD")
+  );
   test.setTimeout(90_000);
 
   test("correct PIN unlocks the check-in screen", async ({ page, assertNoProblems }) => {

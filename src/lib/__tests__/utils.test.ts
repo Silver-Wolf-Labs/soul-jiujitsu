@@ -2,6 +2,8 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   formatDate,
   formatDateLong,
+  formatDateTime,
+  normalizeDayPeriod,
   estimateReadTime,
   toSlug,
   getInitials,
@@ -9,6 +11,44 @@ import {
   toCSV,
   downloadCSV,
 } from "../utils";
+
+/**
+ * Guards a hydration bug that is invisible to the eye: Node's ICU renders the
+ * Spanish day period with a non-breaking space ("a.\u00A0m.") and Chromium with a
+ * plain one ("a. m."), so a time rendered on the server and hydrated in the
+ * browser is *different text* to React — a minified error #418 that failed every
+ * authenticated portal test while looking nothing like a date bug.
+ *
+ * The inputs below use explicit \u00A0 escapes rather than pasted characters, so a
+ * future editor tidying whitespace cannot quietly neuter these assertions.
+ */
+describe("normalizeDayPeriod", () => {
+  it("replaces the non-breaking space inside a Spanish day period", () => {
+    expect(normalizeDayPeriod("9:11 a.\u00A0m.")).toBe("9:11 a. m.");
+    expect(normalizeDayPeriod("7:00 p.\u00A0m.")).toBe("7:00 p. m.");
+  });
+
+  it("is idempotent, so an already-normalised string is untouched", () => {
+    expect(normalizeDayPeriod("9:11 a. m.")).toBe("9:11 a. m.");
+    expect(normalizeDayPeriod(normalizeDayPeriod("9:11 a.\u00A0m."))).toBe("9:11 a. m.");
+  });
+
+  it("preserves the number group separator, which is a load-bearing NBSP", () => {
+    // es-CR groups thousands with NBSP, so a blanket purge would mangle "1 234,5".
+    // This is why the replacement stays scoped to the day period.
+    expect(normalizeDayPeriod("1\u00A0234,5")).toBe("1\u00A0234,5");
+  });
+
+  it("keeps the timezone suffix that follows the day period", () => {
+    expect(normalizeDayPeriod("3:42 p.\u00A0m. GMT-6")).toBe("3:42 p. m. GMT-6");
+  });
+
+  it("is actually applied by the formatters that include an hour", () => {
+    // Asserting on the formatter and not just the helper is what catches a
+    // dropped wrapper at a call site.
+    expect(formatDateTime("2026-03-26T14:30:05Z")).not.toContain("\u00A0m.");
+  });
+});
 
 describe("formatDate", () => {
   it("formats an ISO date string in Spanish", () => {

@@ -1,5 +1,33 @@
 import { BeltColor, BELT_COLOR_MAP } from "./constants";
 
+// ── ICU hydration parity ───────────────────────────────────────────────────
+
+/**
+ * Normalise the Spanish day period so the server and the browser agree on it.
+ *
+ * Node and Chromium disagree on exactly one thing in our formats: Node's ICU
+ * emits the marker as `a. m.` (non-breaking space) where Chromium emits a
+ * plain `a. m.`. The two are visually identical and compare unequal, so any
+ * time rendered on the server and then hydrated trips React's text-mismatch
+ * check — that was the minified error #418 failing every authenticated portal
+ * test, with a stack pointing into a bundle chunk rather than at a date.
+ *
+ * Deliberately narrow. Everything else we format — dates, weekdays, month
+ * names, the timezone suffix — already matches byte-for-byte across both
+ * engines, and a blanket NBSP purge would also strip the group separator out of
+ * `1 234,5`, where it is load-bearing typography rather than an accident.
+ *
+ * Both sides run this, so they converge on the plain space instead of one
+ * engine being declared correct. Applied wherever an `hour` is formatted; the
+ * date-only helpers do not need it.
+ */
+export function normalizeDayPeriod(formatted: string): string {
+  // The NBSP is written as an escape on purpose: a literal one is invisible in a
+  // diff, and the next person to tidy this file would turn it into a normal
+  // space, silently making the replace a no-op and bringing #418 back.
+  return formatted.replace(/([ap]\.)\u00A0(m\.)/gi, "$1 $2");
+}
+
 // ── Date formatting ────────────────────────────────────────────────────────
 
 /**
@@ -22,14 +50,16 @@ export function formatDate(date: string | Date): string {
  */
 export function formatDateTime(date: string | Date): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleString("es-CR", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  return normalizeDayPeriod(
+    d.toLocaleString("es-CR", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+    })
+  );
 }
 
 /**
@@ -77,16 +107,18 @@ export function formatDateTz(date: string | Date, timeZone: string): string {
  */
 export function formatDateTimeTz(date: string | Date, timeZone: string): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleString("es-CR", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    timeZone,
-    timeZoneName: "short",
-  });
+  return normalizeDayPeriod(
+    d.toLocaleString("es-CR", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      timeZone,
+      timeZoneName: "short",
+    })
+  );
 }
 
 /**
@@ -95,12 +127,14 @@ export function formatDateTimeTz(date: string | Date, timeZone: string): string 
  */
 export function formatTimeTz(date: string | Date, timeZone: string): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleTimeString("es-CR", {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone,
-    timeZoneName: "short",
-  });
+  return normalizeDayPeriod(
+    d.toLocaleTimeString("es-CR", {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone,
+      timeZoneName: "short",
+    })
+  );
 }
 
 // ── Slug generation ────────────────────────────────────────────────────────

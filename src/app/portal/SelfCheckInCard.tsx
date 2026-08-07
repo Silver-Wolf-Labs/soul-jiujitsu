@@ -7,6 +7,7 @@ import { selfCheckIn, type PortalTodayClass } from "@/lib/actions/portal";
 import { SpinnerButton } from "@/components/ui/Spinner";
 import { badgeIcon, TIER_STYLES } from "@/lib/badges";
 import { DEFAULT_LOCALE } from "@/i18n/config";
+import { normalizeDayPeriod } from "@/lib/utils";
 import type { AwardedBadge } from "@/lib/actions/check-ins";
 
 /**
@@ -163,9 +164,13 @@ function formatTime(startTime: string): string {
   const h = Number(hStr);
   const m = Number(mStr);
   if (!Number.isFinite(h) || !Number.isFinite(m)) return startTime;
-  return new Date(Date.UTC(2000, 0, 1, h, m)).toLocaleTimeString(DEFAULT_LOCALE, {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "UTC",
-  });
+  // Wrapped for hydration parity: Node writes "p. m." with a non-breaking
+  // space and Chromium with a plain one, which React counts as changed text.
+  return normalizeDayPeriod(
+    new Date(Date.UTC(2000, 0, 1, h, m)).toLocaleTimeString(DEFAULT_LOCALE, {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "UTC",
+    })
+  );
 }
