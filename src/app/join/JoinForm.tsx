@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Circle } from "lucide-react";
 import Link from "next/link";
@@ -8,7 +8,7 @@ import ReactMarkdown from "react-markdown";
 import { createClient } from "@/lib/supabase/client";
 import { useGymProfile } from "@/lib/gym-profile-context";
 import { createMemberProfile } from "@/lib/actions/auth";
-import { SpinnerButton } from "@/components/ui/Spinner";
+import Spinner, { SpinnerButton } from "@/components/ui/Spinner";
 import { BeltColor } from "@/lib/constants";
 import BeltEditor, { type BeltEditorValue } from "@/components/ui/BeltEditor";
 import {
@@ -175,6 +175,21 @@ export default function JoinForm({ waiverTemplate }: Props) {
   // skip feels intentional rather than silent.
   const [noWaiverAcknowledged, setNoWaiverAcknowledged] = useState(false);
 
+  // ── Completing a half-finished signup ──────────────────────────────────────
+  // An auth user with no `members` row lands here from the middleware, which
+  // treats that state as "mid-signup". Before this existed, /join could only
+  // create a NEW account: it called signUp() with the email, Supabase returned
+  // identities: [] (it never confirms whether an address is registered), and the
+  // form stopped with "Ya existe una cuenta — inicia sesión". Login then bounced
+  // the member straight back to /join. A closed loop that only a service-role
+  // key could break.
+  //
+  // So: if there's already a session, skip signUp entirely and use that user id.
+  // create_member_profile_tx is idempotent on user_id, so this is also the safe
+  // way to retry a signup that died after the auth user was created.
+  const [existingUserId, setExistingUserId] = useState<string | null>(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
+
   const [form, setForm] = useState({
     first_name: "",
     last_name: "",
@@ -195,6 +210,31 @@ export default function JoinForm({ waiverTemplate }: Props) {
     training_started_date: "",
   });
 
+  // Declared after `form` so the prefill can build on its initial state.
+  useEffect(() => {
+    const supabase = createClient();
+
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
+
+      if (user) {
+        setExistingUserId(user.id);
+        // Prefill and lock the email: it identifies the session being completed,
+        // so an edit would either fail server-side (the RPC keys on user_id) or,
+        // worse, write a member row whose email doesn't match the account the
+        // member actually logs in with.
+        setForm((prev) => ({
+          ...prev,
+          email: user.email ?? prev.email,
+          first_name: prev.first_name || (user.user_metadata?.first_name as string) || "",
+          last_name:  prev.last_name  || (user.user_metadata?.last_name  as string) || "",
+        }));
+      }
+      setSessionChecked(true);
+    })();
+  }, []);
+
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = e.target;
     const checked = (e.target as HTMLInputElement).checked;
@@ -214,25 +254,31 @@ export default function JoinForm({ waiverTemplate }: Props) {
       setError("Completa todos los campos requeridos.");
       return;
     }
-    if (!form.password) { setError("Escribe una contraseña."); return; }
-    if (form.password !== form.confirm_password) { setError("Las contraseñas no coinciden."); return; }
-    if (form.password.length < 10) {
-      setError("La contraseña debe tener al menos 10 caracteres. Una contraseña larga es más fuerte que una corta con símbolos.");
-      return;
-    }
-
-    // HIBP breach check. Fails open on HIBP network error so an outage
-    // of their service doesn't block signups. See src/lib/auth/hibp.ts.
-    try {
-      const { validatePassword } = await import("@/lib/actions/password-validation");
-      const check = await validatePassword(form.password);
-      if (!check.ok) {
-        setError(check.message);
+    // Password rules apply only when we're about to create an account. A member
+    // completing a half-finished signup already has one, and the fields aren't
+    // rendered on that path — validating them would block the form on inputs
+    // that don't exist.
+    if (!existingUserId) {
+      if (!form.password) { setError("Escribe una contraseña."); return; }
+      if (form.password !== form.confirm_password) { setError("Las contraseñas no coinciden."); return; }
+      if (form.password.length < 10) {
+        setError("La contraseña debe tener al menos 10 caracteres. Una contraseña larga es más fuerte que una corta con símbolos.");
         return;
       }
-    } catch {
-      // If the validation server action itself fails, fall back to just
-      // the length check above. Don't block the user on infrastructure.
+
+      // HIBP breach check. Fails open on HIBP network error so an outage
+      // of their service doesn't block signups. See src/lib/auth/hibp.ts.
+      try {
+        const { validatePassword } = await import("@/lib/actions/password-validation");
+        const check = await validatePassword(form.password);
+        if (!check.ok) {
+          setError(check.message);
+          return;
+        }
+      } catch {
+        // If the validation server action itself fails, fall back to just
+        // the length check above. Don't block the user on infrastructure.
+      }
     }
 
     setStep(2);
@@ -282,45 +328,67 @@ export default function JoinForm({ waiverTemplate }: Props) {
       typeof window !== "undefined" && window.location?.origin
         ? window.location.origin
         : process.env.NEXT_PUBLIC_SITE_URL || "";
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-      options: {
-        emailRedirectTo: `${origin}/auth/callback`,
-        // Pass name in metadata so the handle_new_user() trigger can set
-        // profiles.full_name immediately. The RPC also updates it authoritatively,
-        // but having it in metadata means it is set even before the RPC runs.
-        data: { first_name: form.first_name, last_name: form.last_name },
-      },
-    });
 
-    if (authError) {
-      setLoading(false);
-      setError(authError.message);
-      return;
-    }
+    // Which user are we creating the member row for?
+    //
+    // Two paths reach this form:
+    //   1. A visitor signing up  → create the auth user, then the member row.
+    //   2. A signed-in user with no member row → the auth user already exists,
+    //      so signUp() would return identities: [] and dead-end (see the
+    //      existingUserId comment above). Reuse the session's id instead.
+    let userId: string;
 
-    // Supabase's security model: when an email is already registered, signUp
-    // returns a "fake" user object with identities: [] instead of an error, so
-    // the server can't reveal account existence. Detect it and tell the user
-    // to log in — a vague "unable to create account" confuses people who think
-    // they filled the form wrong.
-    if (!authData.user) {
-      setLoading(false);
-      setError("No se pudo crear la cuenta. Intenta de nuevo.");
-      return;
-    }
-    if (authData.user.identities && authData.user.identities.length === 0) {
-      setLoading(false);
-      setError(
-        `Ya existe una cuenta con ${form.email}. Inicia sesión o restablece tu contraseña.`
-      );
-      return;
+    if (existingUserId) {
+      userId = existingUserId;
+    } else {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: form.email,
+        password: form.password,
+        options: {
+          emailRedirectTo: `${origin}/auth/callback`,
+          // Pass name in metadata so the handle_new_user() trigger can set
+          // profiles.full_name immediately. The RPC also updates it authoritatively,
+          // but having it in metadata means it is set even before the RPC runs.
+          data: { first_name: form.first_name, last_name: form.last_name },
+        },
+      });
+
+      if (authError) {
+        setLoading(false);
+        setError(authError.message);
+        return;
+      }
+
+      if (!authData.user) {
+        setLoading(false);
+        setError("No se pudo crear la cuenta. Intenta de nuevo.");
+        return;
+      }
+
+      // Supabase's security model: when an email is already registered, signUp
+      // returns a "fake" user object with identities: [] instead of an error, so
+      // the server can't reveal account existence.
+      //
+      // Reaching this now means the address belongs to an account we are NOT
+      // signed in as — genuinely "log in instead". The old dead-end was hitting
+      // this branch while signed in as that very account; that case is handled
+      // by the existingUserId path above and never gets here.
+      if (authData.user.identities && authData.user.identities.length === 0) {
+        setLoading(false);
+        setError(
+          `Ya existe una cuenta con ${form.email}. Inicia sesión o restablece tu contraseña.`
+        );
+        return;
+      }
+
+      userId = authData.user.id;
     }
 
     const result = await createMemberProfile({
-      userId: authData.user.id,
-      password: form.password,
+      userId,
+      // Null when completing an existing account: the password was set when the
+      // account was created, and the field isn't shown on this path.
+      password: existingUserId ? null : form.password,
       first_name: form.first_name,
       last_name: form.last_name,
       email: form.email,
@@ -352,6 +420,15 @@ export default function JoinForm({ waiverTemplate }: Props) {
     // which would otherwise let `loading` flip back to false and flash the
     // default button label for a frame before the new page appears.
     setRedirecting(true);
+
+    // Someone completing an existing session has already confirmed their email —
+    // parking them on "check your inbox" would strand them waiting for a message
+    // that is never sent. Send them where they were trying to go.
+    if (existingUserId) {
+      router.push("/portal");
+      return;
+    }
+
     const params = new URLSearchParams({ email: form.email });
     router.push(`/join/verify-email?${params}`);
   }
@@ -373,13 +450,37 @@ export default function JoinForm({ waiverTemplate }: Props) {
         <div className="h-1 w-full bg-gradient-to-r from-yellow to-blue-mid to-purple-light" />
 
         <div className="p-6 sm:p-8">
+          {/* Wait for the session check before rendering the form. It decides
+              whether the password fields exist and whether the email is locked,
+              so rendering first would flash a signup form at a member who is
+              only here to finish their profile — the exact confusion this whole
+              path is meant to remove. */}
+          {!sessionChecked ? (
+            <div className="py-16 flex justify-center">
+              <Spinner />
+            </div>
+          ) : (
+          <>
           {/* Header */}
           <div className="text-center mb-6">
             <h1 className="font-display text-3xl text-black tracking-wider">
               {profile.logoText} &bull; {profile.cityName.toUpperCase()}
             </h1>
-            <p className="text-sm text-muted mt-1">Comienza tu camino</p>
+            <p className="text-sm text-muted mt-1">
+              {existingUserId ? "Completa tu registro" : "Comienza tu camino"}
+            </p>
           </div>
+
+          {/* Why am I here? Without this, a member who just logged in and got
+              redirected sees a signup form and assumes the login failed. */}
+          {existingUserId && (
+            <div className="mb-6 rounded border border-line bg-off-white px-4 py-3">
+              <p className="text-xs text-ink leading-relaxed">
+                Ya iniciaste sesión, pero falta completar tu ficha de socio. Llena
+                estos datos una sola vez y entrarás directo a tu portal.
+              </p>
+            </div>
+          )}
 
           {/* Step indicator */}
           <p className="text-xs text-muted text-center mb-6">Paso {step} de {totalSteps}</p>
@@ -404,7 +505,27 @@ export default function JoinForm({ waiverTemplate }: Props) {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
                 <div className="sm:col-span-2">
                   <label className={labelClass} htmlFor="email">Correo <span className="text-danger">*</span></label>
-                  <input id="email" name="email" type="email" required value={form.email} onChange={handleChange} className={inputClass} autoComplete="email" />
+                  {/* Read-only when completing an existing account: this address
+                      identifies the session, and createMemberProfile rejects a
+                      mismatch server-side anyway. Better to show it locked than
+                      to let it be edited into a guaranteed error. */}
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    required
+                    value={form.email}
+                    onChange={handleChange}
+                    readOnly={!!existingUserId}
+                    aria-describedby={existingUserId ? "email-locked-hint" : undefined}
+                    className={existingUserId ? `${inputClass} bg-off-white text-muted cursor-not-allowed` : inputClass}
+                    autoComplete="email"
+                  />
+                  {existingUserId && (
+                    <p id="email-locked-hint" className="text-[10px] text-muted mt-1">
+                      Es el correo de tu cuenta.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className={labelClass} htmlFor="phone">Teléfono</label>
@@ -478,6 +599,11 @@ export default function JoinForm({ waiverTemplate }: Props) {
                 <span className="text-xs text-ink leading-snug">Quiero recibir avisos y recordatorios de clases</span>
               </label>
 
+              {/* Password fields only when creating an account. A member
+                  completing a half-finished signup already has one; asking
+                  again would read as "set a new password" and confuse the
+                  credential they already use to log in. */}
+              {!existingUserId && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                 <div>
                   <label className={labelClass} htmlFor="password">Contraseña <span className="text-danger">*</span></label>
@@ -488,12 +614,13 @@ export default function JoinForm({ waiverTemplate }: Props) {
                   <input id="confirm_password" name="confirm_password" type="password" required value={form.confirm_password} onChange={handleChange} className={inputClass} autoComplete="new-password" />
                 </div>
               </div>
+              )}
 
               {/* Live password requirements.
                   All 5 rows render unconditionally so the layout never shifts
                   as the user types. The "passwords match" row shows an empty
                   circle until the confirm field has content AND matches. */}
-              {(() => {
+              {!existingUserId && (() => {
                 // Length is the single most predictive factor of how
                 // hard a password is to crack. We drop the legacy
                 // "uppercase + lowercase + number" requirements —
@@ -552,9 +679,13 @@ export default function JoinForm({ waiverTemplate }: Props) {
               <button
                 type="submit"
                 disabled={
-                  form.password.length < 10 ||
-                  form.confirm_password.length === 0 ||
-                  form.password !== form.confirm_password ||
+                  // On the completing path there are no password inputs, so
+                  // gating on them would disable this button forever.
+                  (!existingUserId && (
+                    form.password.length < 10 ||
+                    form.confirm_password.length === 0 ||
+                    form.password !== form.confirm_password
+                  )) ||
                   !termsAccepted
                 }
                 className={btnClass}
@@ -683,8 +814,12 @@ export default function JoinForm({ waiverTemplate }: Props) {
                 className={btnClass}
               >
                 {loading || redirecting
-                  ? <SpinnerButton label={redirecting ? "Redirigiendo" : "Creando cuenta"} />
-                  : profile.joinButtonText}
+                  ? <SpinnerButton label={
+                      redirecting ? "Redirigiendo"
+                      : existingUserId ? "Guardando"
+                      : "Creando cuenta"
+                    } />
+                  : existingUserId ? "Completar registro" : profile.joinButtonText}
               </button>
               <button
                 type="button"
@@ -710,13 +845,18 @@ export default function JoinForm({ waiverTemplate }: Props) {
             </div>
           )}
 
-          {/* Footer */}
-          <p className="mt-6 text-center text-xs text-muted">
-            ¿Ya eres miembro?{" "}
-            <Link href="/portal/login" className="text-ink font-semibold hover:underline">
-              Inicia sesión
-            </Link>
-          </p>
+          {/* Footer. Pointing a signed-in member at "inicia sesión" would send
+              them back around the loop this path exists to break. */}
+          {!existingUserId && (
+            <p className="mt-6 text-center text-xs text-muted">
+              ¿Ya eres miembro?{" "}
+              <Link href="/portal/login" className="text-ink font-semibold hover:underline">
+                Inicia sesión
+              </Link>
+            </p>
+          )}
+          </>
+          )}
         </div>
       </div>
     </div>

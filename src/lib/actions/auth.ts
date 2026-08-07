@@ -36,7 +36,16 @@ const PASSWORD_RULES = [
 
 export async function createMemberProfile(data: {
   userId: string;
-  password: string;
+  /**
+   * The password chosen during signup. Validated here but never written — the
+   * auth user was already created client-side with it; this is a server-side
+   * re-check so the rules can't be bypassed by calling the action directly.
+   *
+   * Null when completing a half-finished signup for an already-authenticated
+   * user (see the existingUserId path in JoinForm): that account's password was
+   * set when it was created, and there is nothing here to validate.
+   */
+  password: string | null;
   first_name: string;
   last_name: string;
   email: string;
@@ -62,9 +71,14 @@ export async function createMemberProfile(data: {
   // Optional — left null in test flows or if no waiver template is active.
   waiver_signature_data_url?: string | null;
 }): Promise<{ success: true } | { error: string }> {
-  // L-1: Server-side password validation
-  for (const rule of PASSWORD_RULES) {
-    if (!rule.test(data.password)) return { error: rule.msg };
+  // L-1: Server-side password validation. Skipped only when there is no
+  // password to check — the completing-an-existing-account path, where the
+  // credential was already set and validated at signup time. The email-match
+  // check below is what authorizes that path, not this.
+  if (data.password !== null) {
+    for (const rule of PASSWORD_RULES) {
+      if (!rule.test(data.password)) return { error: rule.msg };
+    }
   }
 
   const adminSupabase = createServiceClient();

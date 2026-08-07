@@ -64,11 +64,18 @@ export default function PortalNav() {
           >
             Profile
           </Link>
+          {/* Opens the public site in a new tab rather than navigating away.
+              Leaving the portal in the same tab is a one-way door: the public
+              navbar's only entry point is labelled "Ingresar", which reads as
+              "sign in" to someone who is already signed in, so members were
+              landing on the marketing homepage with no obvious way back. */}
           <Link
             href="/"
+            target="_blank"
+            rel="noopener"
             className="text-sm text-muted hover:text-ink transition-colors hidden sm:block"
           >
-            &larr; Back to site
+            Ver el sitio &nearr;
           </Link>
         </div>
 
