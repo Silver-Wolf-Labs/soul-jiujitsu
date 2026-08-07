@@ -27,6 +27,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import type { Member, MemberStatus, MembershipPlan, BeltHistory, CheckInRow } from "@/lib/supabase/types";
 import BeltHistoryList from "@/components/member/BeltHistoryList";
 import CheckInsList from "@/components/member/CheckInsList";
+import MemberBadgesPanel from "@/components/admin/MemberBadgesPanel";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1554,6 +1555,12 @@ export default function MemberDetailPage() {
             <BeltHistoryList entries={beltHistory} />
           </section>
         )}
+
+        {/* Badges — sits next to Belt History because both are recognition the
+            profe hands out, and they'll be reached for in the same moment. */}
+        <div className="xl:order-7">
+          <MemberBadgesPanel memberId={member.id} />
+        </div>
 
         {/* Waiver — seventh on mobile, Row 2 Col 1 on desktop */}
         <section className="bg-white border border-line rounded-lg p-5 xl:order-4">

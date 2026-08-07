@@ -16,7 +16,9 @@ import {
   type KioskClass,
   type KioskMemberStats,
   type GymRankings,
+  type AwardedBadge,
 } from "@/lib/actions/check-ins";
+import { badgeIcon, TIER_STYLES } from "@/lib/badges";
 import BeltVisual from "@/components/ui/BeltVisual";
 import StatsTilesGrid from "@/components/member/StatsTilesGrid";
 import Spinner from "@/components/ui/Spinner";
@@ -28,6 +30,10 @@ import { checkRestrictions as checkRestrictionsImpl, memberAge as memberAgeImpl 
 
 const RESET_DELAY_SUCCESS_MS = 5000;
 const RESET_DELAY_UNDONE_MS  = 3000;
+/** Longer dwell when a badge was just unlocked — 5s isn't enough time to read
+ *  the badge name and description, and this is the moment the member cares
+ *  about. Applies only when there's actually a badge to show. */
+const RESET_DELAY_BADGE_MS   = 9000;
 
 /** Thin wrapper that adapts the KioskMember type to the pure helper's
  *  minimal `RestrictionMember` shape. Keeping this in the page file
@@ -105,6 +111,8 @@ export default function KioskCheckinPage() {
   const [locking, setLocking]     = useState(false);
   const [msg, setMsg]             = useState("");
   const [lastCheckInId, setLastCheckInId] = useState<number | null>(null);
+  /** Badges unlocked by the check-in just recorded — shown on the success screen. */
+  const [awardedBadges, setAwardedBadges] = useState<AwardedBadge[]>([]);
   const [undoing, setUndoing]     = useState(false);
   // Ticks down while the success/undone screens auto-reset — purely cosmetic.
   const [resetCountdown, setResetCountdown] = useState<number | null>(null);
@@ -168,7 +176,7 @@ export default function KioskCheckinPage() {
     setCode(""); setStep("lookup"); setMatches([]);
     setSelected(null); setPickedClass(null); setRestrictionWarning(null); setBusy(false); setLoadingMemberId(null); setMsg("");
     setMemberStats(null); setGymRankings(null); setTodayCheckedIn([]);
-    setLastCheckInId(null); setUndoing(false);
+    setLastCheckInId(null); setUndoing(false); setAwardedBadges([]);
   }, []);
 
   // Auto-reset after success/undone. Undone gets a shorter dwell because
@@ -180,7 +188,10 @@ export default function KioskCheckinPage() {
       setResetCountdown(null);
       return;
     }
-    const delay = step === "undone" ? RESET_DELAY_UNDONE_MS : RESET_DELAY_SUCCESS_MS;
+    const delay =
+      step === "undone"        ? RESET_DELAY_UNDONE_MS
+      : awardedBadges.length > 0 ? RESET_DELAY_BADGE_MS
+      :                           RESET_DELAY_SUCCESS_MS;
     const totalSec = Math.ceil(delay / 1000);
     setResetCountdown(totalSec);
 
@@ -192,7 +203,7 @@ export default function KioskCheckinPage() {
       clearInterval(tickId);
       clearTimeout(resetId);
     };
-  }, [step, reset]);
+  }, [step, reset, awardedBadges.length]);
 
   // When the class list appears, smoothly scroll the class closest to the
   // current local time into the center of the scroll container. Two rAFs
@@ -297,6 +308,7 @@ export default function KioskCheckinPage() {
     const result = await recordCheckIn(selected.id, pickedClass.name, pickedClass.id);
     if (result.ok) {
       setLastCheckInId(result.checkInId ?? null);
+      setAwardedBadges(result.awardedBadges ?? []);
       setStep("success");
     } else {
       setMsg(result.error ?? "Check-in failed. Please see staff.");
@@ -311,6 +323,9 @@ export default function KioskCheckinPage() {
     setUndoing(true);
     const result = await undoKioskCheckIn(selected.id, lastCheckInId);
     if (result.ok) {
+      // The undo cascades away this check-in's XP, so stop advertising the
+      // badges it unlocked — and drop back to the short "undone" dwell.
+      setAwardedBadges([]);
       setStep("undone");
     } else {
       setMsg(result.error ?? "Couldn't undo. Please ask staff.");
@@ -695,6 +710,45 @@ export default function KioskCheckinPage() {
                 <h1 className="font-display text-4xl text-white mb-2">You&apos;re in!</h1>
                 <p className="text-yellow text-lg font-semibold">{selected.first_name} {selected.last_name}</p>
                 <p className="text-white/40 mt-1">{pickedClass.name}</p>
+
+                {/* Badges just unlocked. This is the payoff moment — the member is
+                    standing right here — so it goes on the success screen rather
+                    than waiting for them to open the portal later. */}
+                {awardedBadges.length > 0 && (
+                  <div className="mt-7 w-full max-w-md">
+                    <p className="text-xs uppercase tracking-widest text-white/40 mb-3">
+                      {awardedBadges.length === 1 ? "New badge unlocked" : `${awardedBadges.length} new badges unlocked`}
+                    </p>
+                    <div className="flex flex-col gap-2.5">
+                      {awardedBadges.map((b) => {
+                        const Icon = badgeIcon(b.badge_icon);
+                        const tier = TIER_STYLES[b.badge_tier];
+                        return (
+                          <div
+                            key={b.badge_slug}
+                            className="flex items-center gap-3 px-4 py-3 rounded-lg bg-white/[0.06] border border-white/10"
+                          >
+                            <span
+                              className="w-11 h-11 flex-none rounded-full flex items-center justify-center border-2"
+                              style={{ backgroundColor: tier.bg, borderColor: tier.fg, color: tier.fg }}
+                            >
+                              <Icon className="w-6 h-6" aria-hidden="true" />
+                            </span>
+                            <span className="text-left min-w-0">
+                              <span className="block font-display text-lg text-white leading-tight">
+                                {b.badge_name}
+                              </span>
+                              <span className="block text-xs uppercase tracking-wide" style={{ color: tier.fg }}>
+                                {tier.label}
+                              </span>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <p className="text-white/20 text-sm mt-8">
                   Resetting in {resetCountdown ?? Math.ceil(RESET_DELAY_SUCCESS_MS / 1000)}s…
                 </p>
