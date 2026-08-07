@@ -98,3 +98,9 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # v2 requires a paid licence for repos owned by an organisation, and
+          # it reads it from the environment — a repo secret alone is invisible
+          # to the action unless it is passed in here. Without it the step exits
+          # 1 before scanning anything, which is how this sat "failing" while
+          # never actually having looked for a secret.
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
