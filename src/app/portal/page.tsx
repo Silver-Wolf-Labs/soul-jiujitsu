@@ -7,11 +7,25 @@ import { formatDateTz, formatDateTimeTz } from "@/lib/utils";
 import CurrentPlanCard from "./CurrentPlanCard";
 import CheckoutReturnBanner from "./CheckoutReturnBanner";
 import WaiverStatusBanner from "./WaiverStatusBanner";
-import { getOwnMemberStats, getOwnGymRankings } from "@/lib/actions/portal";
+import {
+  getOwnMemberStats,
+  getOwnGymRankings,
+  getOwnGamification,
+  getOwnBadges,
+} from "@/lib/actions/portal";
 import StatsTilesGrid from "@/components/member/StatsTilesGrid";
 import BeltVisual from "@/components/ui/BeltVisual";
 import PortalCheckInsCard from "./PortalCheckInsCard";
-import type { CheckInRow } from "@/lib/supabase/types";
+import XpProgressCard from "@/components/member/XpProgressCard";
+import StreakCard from "@/components/member/StreakCard";
+import BadgeGrid from "@/components/member/BadgeGrid";
+import BadgeCelebration from "@/components/member/BadgeCelebration";
+import type {
+  CheckInRow,
+  MemberGamification,
+  Badge,
+  EarnedBadge,
+} from "@/lib/supabase/types";
 
 const STATUS_COLORS: Record<MemberStatus, string> = {
   prospect: "bg-disabled-light text-muted",
@@ -106,6 +120,21 @@ export default async function PortalHomePage() {
     // Stats are non-critical; the rest of the page still renders.
   }
 
+  // Gamification (XP, streak, badges). Separate try/catch from the stats above
+  // so a failure in either one doesn't take out the other — a member with a
+  // broken badge row should still see their attendance.
+  let gamification: MemberGamification | null = null;
+  let badges: { earned: EarnedBadge[]; locked: Badge[] } = { earned: [], locked: [] };
+  try {
+    [gamification, badges] = await Promise.all([
+      getOwnGamification(),
+      getOwnBadges(),
+    ]);
+  } catch {
+    // Non-critical; the rest of the page still renders.
+  }
+  const unseenBadges = badges.earned.filter((b) => b.seen_at === null);
+
   if (!member) {
     return (
       <div className="text-center py-16 text-muted">
@@ -147,6 +176,16 @@ export default async function PortalHomePage() {
           <span className="text-sm text-muted">member since {formatDateTz(member.created_at, profile.timezone)}</span>
         </div>
       </div>
+
+      {/* Progress row. Sits above the account cards on purpose: the level bar and
+          the streak are what we want a member to see first, since they're the two
+          numbers that change when they show up to train. */}
+      {gamification && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <XpProgressCard data={gamification} />
+          <StreakCard data={gamification} />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Belt rank card */}
@@ -252,6 +291,12 @@ export default async function PortalHomePage() {
           <PortalCheckInsCard initial={todaysCheckIns} today={today} />
         </div>
       </div>
+
+      {/* Badge wall — earned badges plus the locked ones as goals. */}
+      <BadgeGrid earned={badges.earned} locked={badges.locked} />
+
+      {/* Fires once for anything earned since the member last looked. */}
+      <BadgeCelebration unseen={unseenBadges} />
     </div>
   );
 }

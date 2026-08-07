@@ -12,7 +12,10 @@ type StatKey = "month" | "streak" | "alltime" | "week";
 
 const STAT_LABELS: Record<StatKey, string> = {
   month:   "THIS MONTH",
-  streak:  "STREAK",
+  // "WEEK STREAK", not "STREAK": the portal also shows a training-DAY streak
+  // (StreakCard), and two tiles both labelled "STREAK" showing different
+  // numbers reads as a bug. This one counts consecutive weeks with >= 1 class.
+  streak:  "WEEK STREAK",
   alltime: "ALL-TIME",
   week:    "THIS WEEK",
 };

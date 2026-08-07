@@ -478,11 +478,23 @@ export async function getMemberTodayCheckIns(memberId: number): Promise<string[]
 
 // ── Record check-in ───────────────────────────────────────────────────────────
 
+/**
+ * A badge unlocked by a just-recorded check-in, as returned by the
+ * evaluate_member_badges RPC. Shaped for the kiosk celebration screen.
+ */
+export interface AwardedBadge {
+  badge_slug: string;
+  badge_name: string;
+  /** lucide-react icon name — resolve through badgeIcon(). */
+  badge_icon: string;
+  badge_tier: "bronze" | "silver" | "gold" | "legendary";
+}
+
 export async function recordCheckIn(
   memberId: number,
   className: string,
   scheduleSlotId?: number | null
-): Promise<{ ok: boolean; error?: string; checkInId?: number }> {
+): Promise<{ ok: boolean; error?: string; checkInId?: number; awardedBadges?: AwardedBadge[] }> {
   await requireKioskSession();
 
   const supabase = kioskClient();
@@ -541,7 +553,47 @@ export async function recordCheckIn(
   if (checkInId && scheduleSlotId) {
     await snapshotCheckInTaxonomy(supabase, checkInId, scheduleSlotId);
   }
-  return { ok: true, checkInId };
+  // XP + auto-badges. Runs after the taxonomy snapshot because the modality
+  // badge rules read the snapshotted slot data.
+  const awardedBadges = checkInId
+    ? await awardGamification(supabase, checkInId, memberId)
+    : [];
+  return { ok: true, checkInId, awardedBadges };
+}
+
+/**
+ * Grant XP for a check-in and award any auto-badges it just unlocked.
+ *
+ * Non-fatal by design, exactly like the taxonomy snapshot above: the check-in
+ * row is already durable and attendance is the number the gym bills on, so a
+ * gamification failure must never surface as a failed check-in. The RPCs are
+ * idempotent, so anything missed here is recovered by re-running
+ * `SELECT public.backfill_gamification();`.
+ *
+ * Returns the badges awarded so the kiosk can celebrate them on screen.
+ */
+async function awardGamification(
+  supabase: ReturnType<typeof createServiceClient>,
+  checkInId: number,
+  memberId: number,
+): Promise<AwardedBadge[]> {
+  try {
+    const today = await gymToday();
+    // XP first: evaluate_member_badges credits badge XP into the same ledger,
+    // and a streak badge should be judged with today's class already counted.
+    await supabase.rpc("award_check_in_xp", { p_check_in_id: checkInId });
+
+    const { data, error } = await supabase.rpc("evaluate_member_badges", {
+      p_member_id: memberId,
+      p_today: today,
+    });
+    if (error) throw new Error(error.message);
+
+    return (data ?? []) as AwardedBadge[];
+  } catch (e) {
+    console.error("[gamification] award failed for check-in", checkInId, e);
+    return [];
+  }
 }
 
 /**
@@ -802,6 +854,11 @@ export async function adminRecordCheckIn(
   // gate before we escalate.
   if (inserted?.id && scheduleSlotId) {
     await snapshotCheckInTaxonomy(createServiceClient(), inserted.id as number, scheduleSlotId);
+  }
+  // Same gamification credit as the kiosk path, so a member marked present by
+  // an admin isn't quietly denied the XP and streak they actually earned.
+  if (inserted?.id) {
+    await awardGamification(createServiceClient(), inserted.id as number, memberId);
   }
   await logAuditEvent("CREATE", "check_ins", String(memberId), { class_name: className, class_date: classDate });
 }

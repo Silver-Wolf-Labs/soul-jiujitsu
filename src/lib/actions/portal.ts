@@ -5,7 +5,13 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { logAuditEvent } from "@/lib/audit";
 import { gymToday } from "@/lib/gym-time";
 import type { KioskMemberStats, GymRankings } from "@/lib/actions/check-ins";
-import type { CheckInRow, BeltHistory } from "@/lib/supabase/types";
+import type {
+  CheckInRow,
+  BeltHistory,
+  MemberGamification,
+  Badge,
+  EarnedBadge,
+} from "@/lib/supabase/types";
 import { findOrCreateStripeCustomer, createCheckoutSession } from "@/lib/stripe";
 
 export async function updateOwnProfile(data: {
@@ -336,6 +342,103 @@ export async function getOwnCheckIns(rowCap = 50): Promise<CheckInRow[]> {
 
   if (error) throw new Error(error.message);
   return (data ?? []) as CheckInRow[];
+}
+
+/**
+ * Returns XP / level / streak / badge counts for the authenticated member.
+ * One RPC round-trip; see get_member_gamification in the gamification migration.
+ */
+export async function getOwnGamification(): Promise<MemberGamification> {
+  const member = await resolveOwnMember();
+  const service = createServiceClient();
+  const today = await gymToday();
+
+  const { data, error } = await service.rpc("get_member_gamification", {
+    p_member_id: member.id,
+    p_today: today,
+  });
+
+  if (error) throw new Error(error.message);
+
+  const g = (data?.[0] ?? {}) as Record<string, unknown>;
+  return {
+    xp_total:       Number(g.xp_total       ?? 0),
+    level:          Number(g.level          ?? 1),
+    xp_into_level:  Number(g.xp_into_level  ?? 0),
+    // Never 0 — it's a progress-bar denominator, and level 1 costs 100 XP.
+    xp_for_level:   Number(g.xp_for_level   ?? 100) || 100,
+    streak_days:    Number(g.streak_days    ?? 0),
+    longest_streak: Number(g.longest_streak ?? 0),
+    badges_earned:  Number(g.badges_earned  ?? 0),
+    badges_total:   Number(g.badges_total   ?? 0),
+    unseen_badges:  Number(g.unseen_badges  ?? 0),
+  };
+}
+
+/**
+ * Returns the badge catalogue plus which of them the member has earned.
+ *
+ * Unearned badges are returned too: showing them as locked silhouettes is the
+ * whole point — they're the goals. Secret badges are filtered out unless the
+ * member already has them, so a surprise stays a surprise.
+ */
+export async function getOwnBadges(): Promise<{ earned: EarnedBadge[]; locked: Badge[] }> {
+  const member = await resolveOwnMember();
+  const service = createServiceClient();
+
+  const BADGE_FIELDS = "id, slug, name, description, icon, tier, category, xp_reward, secret, active, sort_order";
+
+  const [catalogueResult, earnedResult] = await Promise.all([
+    service.from("badges").select(BADGE_FIELDS).eq("active", true).order("sort_order"),
+    service
+      .from("member_badges")
+      .select(`awarded_via, awarded_at, note, seen_at, badges (${BADGE_FIELDS})`)
+      .eq("member_id", member.id)
+      .order("awarded_at", { ascending: false }),
+  ]);
+
+  if (catalogueResult.error) throw new Error(catalogueResult.error.message);
+  if (earnedResult.error) throw new Error(earnedResult.error.message);
+
+  const earned: EarnedBadge[] = (earnedResult.data ?? [])
+    // A row whose badge was deactivated still counts as earned, but the join
+    // returns null for it — drop those rather than render an empty tile.
+    .filter((row) => row.badges)
+    .map((row) => ({
+      badge:       row.badges as unknown as Badge,
+      awarded_via: row.awarded_via as "auto" | "manual",
+      awarded_at:  row.awarded_at as string,
+      note:        (row.note as string | null) ?? null,
+      seen_at:     (row.seen_at as string | null) ?? null,
+    }));
+
+  const earnedIds = new Set(earned.map((e) => e.badge.id));
+  const locked = ((catalogueResult.data ?? []) as unknown as Badge[])
+    .filter((b) => !earnedIds.has(b.id) && !b.secret);
+
+  return { earned, locked };
+}
+
+/**
+ * Marks the member's newly-earned badges as seen, so the celebration fires once.
+ * Called from the client after the modal is dismissed.
+ */
+export async function markOwnBadgesSeen(): Promise<{ success: true } | { error: string }> {
+  try {
+    const member = await resolveOwnMember();
+    const service = createServiceClient();
+
+    const { error } = await service
+      .from("member_badges")
+      .update({ seen_at: new Date().toISOString() })
+      .eq("member_id", member.id)
+      .is("seen_at", null);
+
+    if (error) return { error: error.message };
+    return { success: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unknown error" };
+  }
 }
 
 /**

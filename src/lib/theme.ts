@@ -93,6 +93,20 @@ export const colors = {
   beltBorderBrown:  "#5C2F0E",
   beltBorderBlack:  "#000000",
 
+  // ── Badge tier colors (gamification) ──────────────────────────────────────
+  // Deliberately NOT part of ThemeColorSlots: these are metal colors, not brand
+  // colors. A bronze badge has to read as bronze under every theme, otherwise
+  // the tier hierarchy the member is chasing stops being legible. Consumed via
+  // inline `style` in the badge components.
+  tierBronze:       "#a1642a",
+  tierBronzeLight:  "#f7ecdf",
+  tierSilver:       "#7d8590",
+  tierSilverLight:  "#eef0f2",
+  tierGold:         "#b8860b",
+  tierGoldLight:    "#fdf3d4",
+  tierLegendary:    "#7b37cd",   // matches belt purple — the rarest tier
+  tierLegendaryLight: "#f0ebf8",
+
   // ── Miscellaneous component tokens ────────────────────────────────────────
   blogGradientEnd:  "#2a1a08",   // dark end of featured-post gradient
   updateCardHover:  "#fafaf9",   // update-feed card hover (near off-white)

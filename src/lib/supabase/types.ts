@@ -592,3 +592,71 @@ export interface ArchivedWaiverSignature {
   archived_by: string | null;
 }
 
+// ── Gamification ────────────────────────────────────────────────────────────
+
+/** Badge rarity. Drives the colour a badge renders in — see TIER_STYLES. */
+export type BadgeTier = "bronze" | "silver" | "gold" | "legendary";
+
+/** What kind of achievement a badge represents, used to group the badge grid. */
+export type BadgeCategory = "milestone" | "consistency" | "modality" | "skill" | "community";
+
+/**
+ * A badge in the catalogue.
+ * Rules live in the row (not in app code) so the profe can add "50 Gi classes"
+ * from the admin UI without a deploy. A NULL rule_kind means manual-only —
+ * the professor awards it by hand.
+ */
+export interface Badge {
+  id: number;
+  slug: string;
+  name: string;
+  description: string;
+  /** lucide-react icon name. Mapped through BADGE_ICONS, which falls back to Award. */
+  icon: string;
+  tier: BadgeTier;
+  category: BadgeCategory;
+  /** XP credited when the badge is earned. */
+  xp_reward: number;
+  /** Hidden from the "goals" grid until earned — a surprise. */
+  secret: boolean;
+  active: boolean;
+  sort_order: number;
+}
+
+/**
+ * A badge a member has actually earned, joined with its catalogue row.
+ * `note` is the profe's personal message on a manual award — the part members
+ * screenshot and share, so it's displayed verbatim.
+ */
+export interface EarnedBadge {
+  badge: Badge;
+  awarded_via: "auto" | "manual";
+  awarded_at: string;
+  note: string | null;
+  /** NULL until the member has seen the celebration for it. */
+  seen_at: string | null;
+}
+
+/**
+ * The portal's gamification payload — one round-trip via get_member_gamification.
+ * XP is summed from the xp_events ledger, never stored as a counter, so undoing
+ * a check-in or revoking a badge can't leave it drifted.
+ */
+export interface MemberGamification {
+  xp_total: number;
+  level: number;
+  /** Progress inside the current level — the numerator of the progress bar. */
+  xp_into_level: number;
+  /** Size of the current level — the denominator. Widens by 100 XP per level. */
+  xp_for_level: number;
+  /** Consecutive days the gym was OPEN and the member trained. */
+  streak_days: number;
+  /** Personal best, on the same open-day basis so it's always >= streak_days. */
+  longest_streak: number;
+  badges_earned: number;
+  /** Non-secret active badges, i.e. how many are visible as goals. */
+  badges_total: number;
+  /** Earned but not yet celebrated on screen. */
+  unseen_badges: number;
+}
+
