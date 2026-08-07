@@ -19,12 +19,14 @@ INSERT INTO site_settings (key, value) VALUES
   ('gym_name',              'Soul Jiu Jitsu'),
   ('gym_short_name',        'Soul JJ'),
   ('gym_logo_text',         'SOUL'),
-  ('gym_city_name',         'San Diego'),
+  ('gym_city_name',         'Costa Rica'),
   ('gym_tagline',           'Jiu jitsu para el alma. Formamos personas fuertes dentro y fuera del tatami.'),
   ('gym_timezone',          'America/Costa_Rica'),
   ('gym_affiliate_text',    'Jiu jitsu integral en San Diego de Cartago. Un espacio 100% seguro, inclusivo y respetuoso. Afiliados a Sektor Jiu-Jitsu.'),
-  ('gym_footer_tags',       'Gi,No-Gi,Kids,Open Mat'),
+  ('gym_footer_tags',       'Gi,No-Gi,Kids,Wrestling,Open Mat'),
   ('gym_join_button_text',  'Únete a Soul'),
+  ('gym_instagram_url',     'https://www.instagram.com/soul.jiujitsucr'),
+  ('gym_instagram_handle',  '@soul.jiujitsucr'),
   ('gym_meta_title',        'Soul Jiu Jitsu | Jiu Jitsu en San Diego, Cartago, Costa Rica'),
   ('gym_meta_description',  'Entrena jiu jitsu en Soul Jiu Jitsu, San Diego de Cartago. Clases de Gi, No-Gi, kids y open mats en un espacio seguro, inclusivo y respetuoso.'),
 
@@ -115,7 +117,10 @@ INSERT INTO faq_items (question, answer, display_order, active) VALUES
    6, TRUE),
   ('¿Dan clases privadas?',
    'Sí. Consulta los horarios disponibles directamente con el profesor o escríbenos por el formulario de contacto.',
-   7, TRUE);
+   7, TRUE),
+  ('¿Qué es la clase de wrestling?',
+   'Cada 15 días damos una clase de wrestling competitivo aplicado a jiu jitsu y MMA con José Castro, los martes a las 7:00 p. m. Va incluida en la mensualidad para nuestros alumnos; el público general puede entrar por ₡3.000.',
+   8, TRUE);
 
 -- ── 5. Novedades y banner ───────────────────────────────────────────────────
 
@@ -129,7 +134,10 @@ INSERT INTO updates (type, title, body, date, published, display_order) VALUES
    CURRENT_DATE, TRUE, 2),
   ('event', 'Open mats de fin de semana',
    'Viernes 7:00 p. m. open mat de Gi y sábados 12:00 m. d. open mat de No-Gi. Cierra la semana en el tatami.',
-   CURRENT_DATE, TRUE, 3);
+   CURRENT_DATE, TRUE, 3),
+  ('class', 'Wrestling cada 15 días con José Castro',
+   'Clases de wrestling competitivo aplicado a jiu jitsu y MMA, los martes a las 7:00 p. m. cada 15 días. Incluido en la mensualidad; público general ₡3.000.',
+   CURRENT_DATE, TRUE, 4);
 
 DELETE FROM banners;
 INSERT INTO banners (text, color, section, display_order, active) VALUES
@@ -137,9 +145,10 @@ INSERT INTO banners (text, color, section, display_order, active) VALUES
 
 -- ── 6. Taxonomía de clases en español ───────────────────────────────────────
 
--- Nueva modalidad Kids (los peques filtran con su propio chip)
+-- Nuevas modalidades: Kids y Wrestling tienen su propio chip de filtro
 INSERT INTO class_modalities (name, slug, color, sort_order) VALUES
-  ('Kids', 'kids', '#a96b37', 25)
+  ('Kids',      'kids',      '#a96b37', 25),
+  ('Wrestling', 'wrestling', '#e6b323', 35)
 ON CONFLICT (slug) DO NOTHING;
 
 -- Colores alineados al tema soul (verde selva / terracota / marrón)
@@ -170,35 +179,40 @@ UPDATE class_audiences SET name = 'Solo miembros'          WHERE slug = 'members
 
 -- ── 7. Horario real de Soul ─────────────────────────────────────────────────
 --   Lun   6 a. m. Gi   · 5 p. m. Kids · 7 p. m. Gi
---   Mar   6 a. m. No-Gi              · 7 p. m. No-Gi
+--   Mar   6 a. m. No-Gi              · 7 p. m. No-Gi · 7 p. m. Wrestling (cada 15 días)
 --   Mié   6 a. m. Gi                 · 7 p. m. Gi
 --   Jue   6 a. m. No-Gi              · 7 p. m. No-Gi
 --   Vie                              · 7 p. m. Open Mat (Gi)
 --   Sáb   9:30 a. m. Kids · 12 m. d. Open Mat (No-Gi)
+--
+-- El grid del horario es semanal y no modela cadencias quincenales, así que
+-- el wrestling vive como slot propio con la periodicidad escrita en el título.
 
 DELETE FROM schedule_slots;
 
 INSERT INTO schedule_slots
-  (day_of_week, start_time, end_time, title, sort_order, active, modality_id, level_id)
+  (day_of_week, start_time, end_time, title, sort_order, active, modality_id, level_id,
+   instructor_name, show_instructor)
 VALUES
   -- Lunes
-  (1, '06:00', '07:00', 'Gi',             10, TRUE, (SELECT id FROM class_modalities WHERE slug = 'gi'),       (SELECT id FROM class_levels WHERE slug = 'all-levels')),
-  (1, '17:00', '18:00', 'Kids',           20, TRUE, (SELECT id FROM class_modalities WHERE slug = 'kids'),     NULL),
-  (1, '19:00', '20:00', 'Gi',             30, TRUE, (SELECT id FROM class_modalities WHERE slug = 'gi'),       (SELECT id FROM class_levels WHERE slug = 'all-levels')),
+  (1, '06:00', '07:00', 'Gi',             10, TRUE, (SELECT id FROM class_modalities WHERE slug = 'gi'),       (SELECT id FROM class_levels WHERE slug = 'all-levels'), NULL, FALSE),
+  (1, '17:00', '18:00', 'Kids',           20, TRUE, (SELECT id FROM class_modalities WHERE slug = 'kids'),     NULL, NULL, FALSE),
+  (1, '19:00', '20:00', 'Gi',             30, TRUE, (SELECT id FROM class_modalities WHERE slug = 'gi'),       (SELECT id FROM class_levels WHERE slug = 'all-levels'), NULL, FALSE),
   -- Martes
-  (2, '06:00', '07:00', 'No-Gi',          10, TRUE, (SELECT id FROM class_modalities WHERE slug = 'no-gi'),    (SELECT id FROM class_levels WHERE slug = 'all-levels')),
-  (2, '19:00', '20:00', 'No-Gi',          20, TRUE, (SELECT id FROM class_modalities WHERE slug = 'no-gi'),    (SELECT id FROM class_levels WHERE slug = 'all-levels')),
+  (2, '06:00', '07:00', 'No-Gi',          10, TRUE, (SELECT id FROM class_modalities WHERE slug = 'no-gi'),    (SELECT id FROM class_levels WHERE slug = 'all-levels'), NULL, FALSE),
+  (2, '19:00', '20:00', 'No-Gi',          20, TRUE, (SELECT id FROM class_modalities WHERE slug = 'no-gi'),    (SELECT id FROM class_levels WHERE slug = 'all-levels'), NULL, FALSE),
+  (2, '19:00', '20:00', 'Wrestling · cada 15 días', 30, TRUE, (SELECT id FROM class_modalities WHERE slug = 'wrestling'), (SELECT id FROM class_levels WHERE slug = 'all-levels'), 'José Castro', TRUE),
   -- Miércoles
-  (3, '06:00', '07:00', 'Gi',             10, TRUE, (SELECT id FROM class_modalities WHERE slug = 'gi'),       (SELECT id FROM class_levels WHERE slug = 'all-levels')),
-  (3, '19:00', '20:00', 'Gi',             20, TRUE, (SELECT id FROM class_modalities WHERE slug = 'gi'),       (SELECT id FROM class_levels WHERE slug = 'all-levels')),
+  (3, '06:00', '07:00', 'Gi',             10, TRUE, (SELECT id FROM class_modalities WHERE slug = 'gi'),       (SELECT id FROM class_levels WHERE slug = 'all-levels'), NULL, FALSE),
+  (3, '19:00', '20:00', 'Gi',             20, TRUE, (SELECT id FROM class_modalities WHERE slug = 'gi'),       (SELECT id FROM class_levels WHERE slug = 'all-levels'), NULL, FALSE),
   -- Jueves
-  (4, '06:00', '07:00', 'No-Gi',          10, TRUE, (SELECT id FROM class_modalities WHERE slug = 'no-gi'),    (SELECT id FROM class_levels WHERE slug = 'all-levels')),
-  (4, '19:00', '20:00', 'No-Gi',          20, TRUE, (SELECT id FROM class_modalities WHERE slug = 'no-gi'),    (SELECT id FROM class_levels WHERE slug = 'all-levels')),
+  (4, '06:00', '07:00', 'No-Gi',          10, TRUE, (SELECT id FROM class_modalities WHERE slug = 'no-gi'),    (SELECT id FROM class_levels WHERE slug = 'all-levels'), NULL, FALSE),
+  (4, '19:00', '20:00', 'No-Gi',          20, TRUE, (SELECT id FROM class_modalities WHERE slug = 'no-gi'),    (SELECT id FROM class_levels WHERE slug = 'all-levels'), NULL, FALSE),
   -- Viernes
-  (5, '19:00', '20:30', 'Open Mat · Gi',  10, TRUE, (SELECT id FROM class_modalities WHERE slug = 'open-mat'), NULL),
+  (5, '19:00', '20:30', 'Open Mat · Gi',  10, TRUE, (SELECT id FROM class_modalities WHERE slug = 'open-mat'), NULL, NULL, FALSE),
   -- Sábado
-  (6, '09:30', '10:30', 'Kids',           10, TRUE, (SELECT id FROM class_modalities WHERE slug = 'kids'),     NULL),
-  (6, '12:00', '13:30', 'Open Mat · No-Gi', 20, TRUE, (SELECT id FROM class_modalities WHERE slug = 'open-mat'), NULL);
+  (6, '09:30', '10:30', 'Kids',           10, TRUE, (SELECT id FROM class_modalities WHERE slug = 'kids'),     NULL, NULL, FALSE),
+  (6, '12:00', '13:30', 'Open Mat · No-Gi', 20, TRUE, (SELECT id FROM class_modalities WHERE slug = 'open-mat'), NULL, NULL, FALSE);
 
 -- ── 8. Planes en colones (MONTOS PROVISIONALES) ─────────────────────────────
 
@@ -212,14 +226,14 @@ VALUES
   ('3 clases/semana',
    'Membresía mensual — hasta 3 clases por semana, Gi y No-Gi',
    2500000, 'month', 0, 'active',
-   '["Hasta 3 clases por semana","Gi y No-Gi","Open mats incluidos","Sin contrato"]'::jsonb,
+   '["Hasta 3 clases por semana","Gi y No-Gi","Open mats incluidos","Wrestling cada 15 días incluido","Sin contrato"]'::jsonb,
    FALSE, NULL, NULL, 'Quiero empezar', '/join',
    1, TRUE, '/mes'),
 
   ('Ilimitado',
    'Membresía mensual ilimitada — Gi y No-Gi',
    3500000, 'month', 0, 'active',
-   '["Gi y No-Gi ilimitado","Open mats incluidos","Horarios de 6:00 a. m. y 7:00 p. m.","Sin contrato"]'::jsonb,
+   '["Gi y No-Gi ilimitado","Open mats incluidos","Wrestling cada 15 días incluido","Horarios de 6:00 a. m. y 7:00 p. m.","Sin contrato"]'::jsonb,
    TRUE, 'Más popular', 'yellow', 'Quiero empezar', '/join',
    2, TRUE, '/mes'),
 
@@ -244,4 +258,7 @@ DELETE FROM team;
 INSERT INTO team (name, role, belt, bio, slug, "order", type, active, visible_on_public_team) VALUES
   ('Luis Tristán', 'Profesor principal', 'black',
    'Cinta negra y profesor principal de Soul Jiu Jitsu. Lidera cada clase con técnica, paciencia y respeto por el arte.',
-   'luis-tristan', 0, 'head_coach', TRUE, TRUE);
+   'luis-tristan', 0, 'head_coach', TRUE, TRUE),
+  ('Diego García', 'Profesor', 'purple',
+   'Cinta morada y profesor de Soul Jiu Jitsu. Acompaña a los alumnos en su progreso dentro y fuera del tatami.',
+   'diego-garcia', 1, 'instructor', TRUE, TRUE);

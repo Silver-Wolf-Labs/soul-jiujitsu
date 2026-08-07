@@ -43,12 +43,12 @@ export const DEFAULT_GYM_PROFILE: GymProfile = {
   shortName: "Soul JJ",
   logoText: "SOUL",
   logoDot: "\u2022",
-  cityName: "San Diego",
+  cityName: "Costa Rica",
   tagline: "Jiu jitsu para el alma. Formamos personas fuertes dentro y fuera del tatami.",
   timezone: "America/Costa_Rica",
   affiliateText:
     "Jiu jitsu integral en San Diego de Cartago. Un espacio 100% seguro, inclusivo y respetuoso. Afiliados a Sektor Jiu-Jitsu.",
-  footerTags: ["Gi", "No-Gi", "Kids", "Open Mat"],
+  footerTags: ["Gi", "No-Gi", "Kids", "Wrestling", "Open Mat"],
   joinButtonText: "Únete a Soul",
   meta: {
     title: "Soul Jiu Jitsu | Jiu Jitsu en San Diego, Cartago, Costa Rica",
@@ -57,8 +57,8 @@ export const DEFAULT_GYM_PROFILE: GymProfile = {
     url: "http://localhost:3000",
   },
   social: {
-    instagram: "",
-    instagramHandle: "",
+    instagram: "https://www.instagram.com/soul.jiujitsucr",
+    instagramHandle: "@soul.jiujitsucr",
   },
   contact: {
     address: "Cola de Gallo Comida Mexicana & Mixology Cocktails",

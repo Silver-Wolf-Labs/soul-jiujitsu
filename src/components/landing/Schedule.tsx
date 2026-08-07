@@ -76,6 +76,7 @@ function slotClassType(slot: EnrichedScheduleSlot): ClassType {
     case "no-gi":             return ClassType.NoGi;
     case "kids":              return ClassType.Youth;
     case "open-mat":          return ClassType.OpenMat;
+    case "wrestling":         return ClassType.Special;
     case "competition-prep":  return ClassType.Special;
     case "conditioning":      return ClassType.Special;
     default:                  return ClassType.Gi;
@@ -159,6 +160,7 @@ function buildFilters(modalities: ClassModality[]): FilterChip[] {
         "no-gi":            { dot: CLASS_TYPE_CONFIG[ClassType.NoGi].dotColor },
         "kids":             { dot: CLASS_TYPE_CONFIG[ClassType.Youth].dotColor },
         "open-mat":         { dot: CLASS_TYPE_CONFIG[ClassType.OpenMat].dotColor },
+        "wrestling":        { dot: CLASS_TYPE_CONFIG[ClassType.Special].dotColor },
         "competition-prep": { dot: CLASS_TYPE_CONFIG[ClassType.Special].dotColor },
       };
       const themed = legacyTheme[m.slug];
