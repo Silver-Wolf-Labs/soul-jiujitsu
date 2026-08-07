@@ -15,11 +15,11 @@ export default function XpProgressCard({ data }: { data: MemberGamification }) {
   const remaining = Math.max(0, data.xp_for_level - data.xp_into_level);
 
   return (
-    <div className="bg-white border border-line rounded-lg p-5 flex flex-col">
+    <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5 flex flex-col">
       <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Level</div>
 
       <div className="flex items-baseline gap-2">
-        <span className="font-display text-3xl text-black leading-none">{data.level}</span>
+        <span className="font-display text-3xl text-black dark:text-ink leading-none">{data.level}</span>
         <span className="text-sm text-muted">{data.xp_total.toLocaleString()} XP</span>
       </div>
 

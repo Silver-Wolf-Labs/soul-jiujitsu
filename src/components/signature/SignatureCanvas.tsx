@@ -7,6 +7,20 @@ import { useEffect, useRef, useImperativeHandle, forwardRef } from "react";
 const CANVAS_W = 400;
 const CANVAS_H = 200;
 
+/**
+ * Signature ink and paper are FIXED, not themed.
+ *
+ * These used to read --color-ink / --color-belt-white off the document, which
+ * broke the moment a surface had a dark theme: the stroke came back light, the
+ * fill came back light, and the member drew an invisible signature that was
+ * then stored as a PNG and rendered on a white background in the admin console
+ * and on the printed waiver. A signature is a legal record of consent — it has
+ * to be legible wherever it's later viewed, which means it cannot depend on the
+ * theme that happened to be active when it was drawn.
+ */
+export const SIGNATURE_INK = "#1a1a1a";
+export const SIGNATURE_PAPER = "#ffffff";
+
 export interface SignatureCanvasHandle {
   clear: () => void;
   isEmpty: () => boolean;
@@ -34,9 +48,9 @@ export const SignatureCanvas = forwardRef<SignatureCanvasHandle, Props>(
       const canvas = canvasRef.current;
       if (!canvas) return;
       const c = canvas.getContext("2d")!;
-      c.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-belt-white').trim() || '#ffffff';
+      c.fillStyle = SIGNATURE_PAPER;
       c.fillRect(0, 0, CANVAS_W, CANVAS_H);
-      c.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-ink').trim() || '#1a1a1a';
+      c.strokeStyle = SIGNATURE_INK;
       c.lineWidth = 2.5;
       c.lineCap = "round";
       c.lineJoin = "round";
@@ -130,7 +144,7 @@ export const SignatureCanvas = forwardRef<SignatureCanvasHandle, Props>(
         const canvas = canvasRef.current;
         if (!canvas) return;
         const c = canvas.getContext("2d")!;
-        c.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-belt-white').trim() || '#ffffff';
+        c.fillStyle = SIGNATURE_PAPER;
         c.fillRect(0, 0, CANVAS_W, CANVAS_H);
         hasStrokes.current = false;
         onChangeRef.current?.(true);

@@ -72,7 +72,7 @@ export default function Spinner({ size = "md", label, delay, className = "" }: P
 export function SpinnerPage({ label }: { label?: string }) {
   return (
     <div className="flex items-center justify-center min-h-[40vh]">
-      <div className="flex flex-col items-center gap-3 text-black">
+      <div className="flex flex-col items-center gap-3 text-black dark:text-ink">
         <Spinner size="lg" delay label={label ?? "Loading"} />
       </div>
     </div>

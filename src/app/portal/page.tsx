@@ -12,7 +12,14 @@ import {
   getOwnGymRankings,
   getOwnGamification,
   getOwnBadges,
+  getOwnTodayClasses,
+  getTeamLeaderboard,
+  getTeamActivity,
 } from "@/lib/actions/portal";
+import SelfCheckInCard from "./SelfCheckInCard";
+import TeamFeed from "@/components/member/TeamFeed";
+import type { PortalTodayClass } from "@/lib/actions/portal";
+import type { TeamMemberEntry, TeamActivityEntry } from "@/lib/supabase/types";
 import StatsTilesGrid from "@/components/member/StatsTilesGrid";
 import BeltVisual from "@/components/ui/BeltVisual";
 import PortalCheckInsCard from "./PortalCheckInsCard";
@@ -47,29 +54,29 @@ export default async function PortalHomePage() {
   if (!userData?.user) {
     return (
       <div className="min-h-screen bg-off-white flex items-start justify-center px-4">
-        <div className="max-w-sm mx-auto mt-16 w-full p-8 bg-white border border-line rounded-lg shadow-sm">
+        <div className="max-w-sm mx-auto mt-16 w-full p-8 bg-white dark:bg-portal-card border border-line rounded-lg shadow-sm">
           <div className="h-1 w-full bg-gradient-to-r from-yellow to-blue-mid to-purple-light -mx-8 -mt-8 mb-8 rounded-t-lg" style={{ width: "calc(100% + 4rem)" }} />
           <div className="text-center mb-8">
-            <div className="font-display text-2xl text-black tracking-tight">{profile.logoText} &bull; {profile.cityName.toUpperCase()}</div>
+            <div className="font-display text-2xl text-black dark:text-ink tracking-tight">{profile.logoText} &bull; {profile.cityName.toUpperCase()}</div>
             <div className="text-sm text-muted mt-1">Member Portal</div>
           </div>
           <div className="space-y-3">
             <Link
               href="/portal/login"
-              className="block w-full py-2.5 bg-black text-white rounded font-semibold text-sm text-center hover:bg-near-black transition-colors"
+              className="block w-full py-2.5 bg-black text-white dark:bg-yellow dark:text-black rounded font-semibold text-sm text-center hover:bg-near-black dark:hover:bg-yellow-deep transition-colors"
             >
               Sign In
             </Link>
             <Link
               href="/join"
-              className="block w-full py-2.5 bg-white text-black rounded font-semibold text-sm text-center border border-line hover:border-black transition-colors"
+              className="block w-full py-2.5 bg-white dark:bg-portal-card text-black dark:text-ink rounded font-semibold text-sm text-center border border-line hover:border-black dark:hover:border-yellow transition-colors"
             >
               {profile.joinButtonText}
             </Link>
           </div>
           <p className="mt-6 text-center text-xs text-muted">
             Forgot your password?{" "}
-            <Link href="/portal/forgot-password" className="text-black underline underline-offset-2 hover:opacity-70">
+            <Link href="/portal/forgot-password" className="text-black dark:text-ink underline underline-offset-2 hover:opacity-70">
               Reset it here
             </Link>
           </p>
@@ -135,6 +142,28 @@ export default async function PortalHomePage() {
   }
   const unseenBadges = badges.earned.filter((b) => b.seen_at === null);
 
+  // Today's schedule for self check-in, plus the social feed's first paint.
+  // Separate try/catch again, and separate from each other: the team feed reads
+  // through SECURITY DEFINER RPCs that a fresh deploy might not have yet, and
+  // that must not be able to take away a member's ability to check in.
+  let todayClasses: PortalTodayClass[] = [];
+  try {
+    todayClasses = await getOwnTodayClasses();
+  } catch {
+    // Falls through to "No classes on the schedule today."
+  }
+
+  let teamLeaderboard: TeamMemberEntry[] = [];
+  let teamActivity: TeamActivityEntry[] = [];
+  try {
+    [teamLeaderboard, teamActivity] = await Promise.all([
+      getTeamLeaderboard(),
+      getTeamActivity(),
+    ]);
+  } catch {
+    // Non-critical; the feed renders its own empty state.
+  }
+
   if (!member) {
     return (
       <div className="text-center py-16 text-muted">
@@ -164,7 +193,7 @@ export default async function PortalHomePage() {
       <WaiverStatusBanner status={member.waiver_status} />
 
       <div>
-        <h1 className="font-display text-3xl text-black">
+        <h1 className="font-display text-3xl text-black dark:text-ink">
           Welcome back, {member.first_name}
         </h1>
         <div className="mt-2 flex items-center gap-2">
@@ -175,6 +204,16 @@ export default async function PortalHomePage() {
           </span>
           <span className="text-sm text-muted">member since {formatDateTz(member.created_at, profile.timezone)}</span>
         </div>
+      </div>
+
+      {/* Self check-in, first thing under the greeting. It's the only action on
+          this page a member comes here to *do* — everything below is something
+          they came to look at. */}
+      <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5">
+        <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">
+          Check in to a class
+        </div>
+        <SelfCheckInCard classes={todayClasses} />
       </div>
 
       {/* Progress row. Sits above the account cards on purpose: the level bar and
@@ -189,7 +228,7 @@ export default async function PortalHomePage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Belt rank card */}
-        <div className="bg-white border border-line rounded-lg p-5 flex flex-col">
+        <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5 flex flex-col">
           <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">Current Rank</div>
           <BeltVisual
             belt={(member.belt ?? "white") as "white" | "blue" | "purple" | "brown" | "black"}
@@ -211,20 +250,20 @@ export default async function PortalHomePage() {
         />
 
         {/* Waiver card */}
-        <div className="bg-white border border-line rounded-lg p-5 flex flex-col">
+        <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5 flex flex-col">
           <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Waiver</div>
           {member.waiver_signed_at ? (
             <>
               <div className="font-display text-lg text-success">Signed</div>
               <div className="text-sm text-muted mt-1">
-                Signed as <span className="font-semibold text-black tracking-widest">{memberInitials}</span>
+                Signed as <span className="font-semibold text-black dark:text-ink tracking-widest">{memberInitials}</span>
               </div>
               <div className="text-xs text-muted mt-0.5">
                 {formatDateTimeTz(member.waiver_signed_at, profile.timezone)}
               </div>
               <Link
                 href="/portal/profile?tab=waiver"
-                className="mt-auto pt-3 text-sm text-black underline underline-offset-2 hover:opacity-70"
+                className="mt-auto pt-3 text-sm text-black dark:text-ink underline underline-offset-2 hover:opacity-70"
               >
                 View details
               </Link>
@@ -238,24 +277,24 @@ export default async function PortalHomePage() {
         </div>
 
         {/* Quick links card */}
-        <div className="bg-white border border-line rounded-lg p-5 flex flex-col">
+        <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5 flex flex-col">
           <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">Quick Links</div>
           <Link
             href="/portal/profile"
-            className="block w-full py-2.5 bg-black text-white rounded font-semibold text-sm text-center hover:bg-near-black transition-colors mb-3"
+            className="block w-full py-2.5 bg-black text-white dark:bg-yellow dark:text-black rounded font-semibold text-sm text-center hover:bg-near-black dark:hover:bg-yellow-deep transition-colors mb-3"
           >
             Edit Profile
           </Link>
           <div className="space-y-2">
             <Link
               href="/portal/profile?tab=emergency"
-              className="block text-sm text-black underline underline-offset-2 hover:opacity-70"
+              className="block text-sm text-black dark:text-ink underline underline-offset-2 hover:opacity-70"
             >
               Emergency Contacts
             </Link>
             <Link
               href="/portal/profile?tab=billing"
-              className="block text-sm text-black underline underline-offset-2 hover:opacity-70"
+              className="block text-sm text-black dark:text-ink underline underline-offset-2 hover:opacity-70"
             >
               Billing History
             </Link>
@@ -266,7 +305,7 @@ export default async function PortalHomePage() {
                 redirecting back here with ?billing_error=... */}
             <a
               href="/api/portal/billing"
-              className="block text-sm text-black underline underline-offset-2 hover:opacity-70"
+              className="block text-sm text-black dark:text-ink underline underline-offset-2 hover:opacity-70"
             >
               Manage billing ↗
             </a>
@@ -276,7 +315,7 @@ export default async function PortalHomePage() {
 
       {/* Stats + today's check-ins — side-by-side on tablet+, stacked on mobile */}
       <div className="grid grid-cols-1 md:grid-cols-[7fr_3fr] lg:grid-cols-2 gap-4">
-        <div className="bg-white border border-line rounded-lg p-5">
+        <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5">
           <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">Your Stats</div>
           <StatsTilesGrid
             memberStats={memberStats}
@@ -284,7 +323,7 @@ export default async function PortalHomePage() {
             variant="light"
           />
         </div>
-        <div className="bg-white border border-line rounded-lg p-5">
+        <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5">
           <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">
             Today&apos;s Check-ins
           </div>
@@ -294,6 +333,10 @@ export default async function PortalHomePage() {
 
       {/* Badge wall — earned badges plus the locked ones as goals. */}
       <BadgeGrid earned={badges.earned} locked={badges.locked} />
+
+      {/* The rest of the gym. Last because it's the browsing surface: a member
+          checks in, sees their own numbers, then looks outward. */}
+      <TeamFeed initialLeaderboard={teamLeaderboard} initialActivity={teamActivity} />
 
       {/* Fires once for anything earned since the member last looked. */}
       <BadgeCelebration unseen={unseenBadges} />

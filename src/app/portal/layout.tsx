@@ -8,7 +8,13 @@ export default function PortalLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-off-white">
+    // data-portal-theme is what switches the whole subtree to the dark palette:
+    // it both re-points the --color-* custom properties (portal-dark.css) and
+    // activates Tailwind's `dark:` variant (darkMode is keyed to this exact
+    // attribute). Scoping it here rather than on <html> is the point — the admin
+    // console and the public site stay light, and components shared with them
+    // are unaffected.
+    <div data-portal-theme="dark" className="min-h-screen bg-off-white">
       <PortalAuthGuard />
       <PortalSessionGuard />
       <PortalNav />

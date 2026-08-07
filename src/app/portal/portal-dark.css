@@ -1,0 +1,167 @@
+/**
+ * Dark theme for the member portal.
+ *
+ * WHY THIS IS A CSS-VAR OVERRIDE RATHER THAN A REWRITE OF EVERY COMPONENT
+ * ----------------------------------------------------------------------
+ * Almost every colour in this project already resolves through a `--color-*`
+ * custom property (see src/lib/themes/css.ts). Re-pointing those properties
+ * inside the portal's subtree therefore flips the whole surface at once —
+ * including components shared with the admin console (CheckInsList,
+ * BeltHistoryList, Pager), which keep their light appearance there because this
+ * block is scoped to an attribute only the portal layout sets.
+ *
+ * The alternative — adding `dark:` classes at a few hundred call sites — would
+ * have meant every future component needing a matching pair of colours forever,
+ * and the first one someone forgot would be a white card on a black page.
+ *
+ * THE EXCEPTION: `white` and `black`
+ * ----------------------------------
+ * Those two are hard-coded hex in tailwind.config.ts, not vars, because the
+ * public site's brand surfaces depend on a literal white — and, more
+ * importantly, because a signature PNG must stay ink-on-white no matter what
+ * theme was active when it was drawn (see SignatureCanvas). So they are NOT
+ * remapped here. Instead the portal's own markup carries `dark:` variants for
+ * the handful of `bg-white` / `text-black` / `bg-black text-white` call sites,
+ * and Tailwind's darkMode selector is keyed to this same attribute.
+ *
+ * Contrast: every text/background pair below was measured. The lowest is
+ * muted-on-tile at 7.3:1, well past WCAG AA's 4.5:1 for body text. Surface
+ * separation is deliberately low (card-on-page ≈ 1.07:1) because it carries no
+ * information — borders do that work.
+ */
+
+/* Light-mode fallback for the card token. `portal-card` is only ever used behind
+   a `dark:` variant, so these should never actually render — they're here so a
+   `bg-portal-card` written without the variant by mistake degrades to the
+   ordinary card white rather than resolving to nothing and painting transparent.
+   Declared before the dark block so the attribute-scoped override wins.
+
+   They live here rather than in the generated theme slots because the card
+   surface is portal-specific: it isn't a knob a gym operator should be able to
+   recolour from the theme picker. */
+:root {
+  --color-portal-card:       #ffffff;
+  --color-portal-card-hover: #f8f7f5;
+}
+
+/* The portal's dark surface is a <div> inside <body>, and body is `bg-white`
+   (globals.css). Anything outside that div therefore stays white: the rubber-band
+   area on iOS overscroll, and the strip below the content on a short page. Reach
+   back up from the portal div with :has() rather than moving the attribute to
+   <html> — putting it on <html> would let the dark palette escape into any
+   non-portal chrome that renders in the same document.
+
+   `color-scheme` is repeated up here because the scrollbar belongs to the
+   viewport, not to the portal div: setting it only on the div leaves a light
+   scrollbar track beside a dark page. */
+html:has([data-portal-theme="dark"]) {
+  color-scheme: dark;
+}
+html:has([data-portal-theme="dark"]) body {
+  /* The literal hex is repeated rather than written as var(--color-off-white).
+     The dark value of that variable is declared on the portal <div>, which is a
+     DESCENDANT of body — custom properties inherit downward only, so body would
+     resolve the light value and paint white. Keep in sync with --color-off-white
+     in the block below. */
+  background-color: #0d0b07;
+}
+
+/* Specificity is 0,1,0 here — the same as the :root above and the same as the
+   theme <style> the root layout injects. Equal specificity means source order
+   decides, and this file is @imported at the TOP of globals.css while that
+   <style> lives in <head>, i.e. earlier still. That's fine for every slot the
+   theme also defines (later wins → this one), but it is the reason the attribute
+   selector must not be weakened to something :root could outrank. */
+[data-portal-theme="dark"] {
+  /* Native form controls, autofill backgrounds and date pickers don't read
+     custom properties. Without this, tapping the "training started" date field
+     opens a white calendar over a black page. */
+  color-scheme: dark;
+
+  /* ── Surfaces ───────────────────────────────────────────────────────────
+     Warm near-black rather than neutral grey: the brand is gold on warm dark
+     (see .bg-soul-dark on the public site), and a grey portal beside it looks
+     like a different product. Three depths only — page, card, tile — because a
+     fourth level stops reading as depth and starts reading as noise.
+
+     `off-white` is the page because that's what the portal layout already uses
+     as its background; `paper` is the inset tile (stat tiles, progress track).
+     Cards are `bg-white` in the markup and get a `dark:` override there. */
+  --color-off-white:  #0d0b07;
+  --color-paper:      #211c12;
+
+  /* The portal's card surface. Exposed as the Tailwind colour `portal-card`
+     (see tailwind.config.ts) so markup reads `bg-white dark:bg-portal-card`.
+     It is a separate token rather than a remap of `white` — see the note above
+     about signatures needing a literal white. */
+  --color-portal-card:       #17140d;
+  --color-portal-card-hover: #1f1b11;
+
+  /* ── Text ───────────────────────────────────────────────────────────────
+     Warm off-white, not #fff: pure white on near-black haloes at small sizes,
+     and the portal is mostly 11–14px text. */
+  --color-ink:        #ede8dd;
+  --color-near-black: #f5f1e8;   /* hover target for text-ink, so it brightens */
+  --color-muted:      #b3a996;
+
+  /* ── Lines ──────────────────────────────────────────────────────────────
+     Lifted from the surface rather than darkened: on a dark background a darker
+     line reads as a gap, a lighter one reads as an edge. */
+  --color-line:       #35301f;
+  --color-line-dark:  #4a4330;
+
+  /* ── Yellow (brand accent) ──────────────────────────────────────────────
+     The yellow itself is untouched — it's the brand, and it reads at 12.3:1
+     here. The tints have to invert: yellow-light was a near-white wash designed
+     to sit behind dark text, and on a dark card it becomes a glaring block. */
+  --color-yellow-light:  #2e2408;
+  --color-yellow-border: #5c4a10;
+  --color-yellow-dark:   #f5cf5c;   /* was dark amber ON light; now light ON dark */
+  --color-yellow-deep:   #e8be3f;
+  --color-yellow-today:  #24200f;
+
+  /* ── Blue / purple / orange / brown ─────────────────────────────────────
+     Same inversion: mid-tones brighten so they stay legible as text, light
+     tints darken so they stay backgrounds. */
+  --color-blue:        #93bdf0;
+  --color-blue-mid:    #7dabe8;
+  --color-blue-light:  #12233a;
+
+  --color-purple:       #c4a2f0;
+  --color-purple-light: #221a33;
+
+  --color-orange:        #f59e5b;
+  --color-orange-light:  #2b1a0d;
+  --color-orange-mid:    #ffb374;
+  --color-orange-border: #5c3a1c;
+
+  --color-brown:        #d1a074;
+  --color-brown-light:  #2a1f14;
+
+  /* ── Status ─────────────────────────────────────────────────────────────
+     These drive the waiver-pending banner and payment errors — the most
+     consequential text in the portal — so they get the brightest variants. */
+  --color-status-success:        #4ade80;
+  --color-status-success-light:  #0d2818;
+  --color-status-success-border: #1e5236;
+  --color-success-dark:          #86efac;
+
+  --color-status-error:          #fca5a5;
+  --color-status-error-light:    #2d1215;
+  --color-status-error-border:   #5c2226;
+  --color-danger-dark:           #fecaca;
+
+  --color-status-alert:          #fbbf5a;
+  --color-status-alert-light:    #2b2008;
+  --color-status-alert-border:   #5c4514;
+
+  --color-disabled-light:        #211c12;
+
+  /* ── Belt white ─────────────────────────────────────────────────────────
+     A white belt drawn in #fff on a dark card is a bright blob with no visible
+     edge. Dimmed just enough to keep its shape while still reading as "white"
+     beside the blue / purple / brown belts. */
+  --color-belt-white:      #d6d1c4;
+  --color-belt-body-white: #cfc9ba;
+}
+

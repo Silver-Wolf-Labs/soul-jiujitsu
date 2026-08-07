@@ -538,7 +538,7 @@ export interface CheckInRow {
   class_date: string;
   /** ISO timestamptz — displayed as the time of check-in. */
   checked_in_at: string;
-  source: "kiosk" | "admin";
+  source: "kiosk" | "admin" | "portal";
 }
 
 export interface BeltHistory {
@@ -658,5 +658,44 @@ export interface MemberGamification {
   badges_total: number;
   /** Earned but not yet celebrated on screen. */
   unseen_badges: number;
+}
+
+// ── Social team feed ────────────────────────────────────────────────────────
+//
+// These mirror get_team_leaderboard / get_team_activity in
+// 20260809000000_social_team_feed.sql. Both are deliberately narrow: display
+// name, belt, level, streak, badge count. No phone, email, emergency contact
+// or billing data crosses this boundary, because the feed is visible to every
+// member of the gym rather than only to staff.
+
+/** One row of the team leaderboard. `display_name` is "First L.", never a full surname. */
+export interface TeamMemberEntry {
+  member_id: number;
+  display_name: string;
+  belt: string;
+  stripes: number;
+  xp_total: number;
+  level: number;
+  streak_days: number;
+  longest_streak: number;
+  badges_earned: number;
+  /** ISO date "YYYY-MM-DD" of their most recent check-in, or null if never. */
+  last_check_in: string | null;
+  /** True for the row belonging to the viewer — the UI highlights it. */
+  is_self: boolean;
+}
+
+/** One entry in the recent-activity feed: someone trained, or earned a badge. */
+export interface TeamActivityEntry {
+  kind: "check_in" | "badge";
+  member_id: number;
+  display_name: string;
+  belt: string;
+  /** Class name for a check-in, badge name for a badge. */
+  title: string;
+  /** lucide-react icon name for badges; null for check-ins. */
+  icon: string | null;
+  occurred_at: string;
+  is_self: boolean;
 }
 

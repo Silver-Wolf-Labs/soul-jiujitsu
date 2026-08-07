@@ -3,7 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { logAuditEvent } from "@/lib/audit";
-import { gymToday } from "@/lib/gym-time";
+import { gymToday, gymPgDay } from "@/lib/gym-time";
+import { writeCheckIn, type AwardedBadge } from "@/lib/check-in-core";
 import type { KioskMemberStats, GymRankings } from "@/lib/actions/check-ins";
 import type {
   CheckInRow,
@@ -11,6 +12,8 @@ import type {
   MemberGamification,
   Badge,
   EarnedBadge,
+  TeamMemberEntry,
+  TeamActivityEntry,
 } from "@/lib/supabase/types";
 import { findOrCreateStripeCustomer, createCheckoutSession } from "@/lib/stripe";
 
@@ -460,4 +463,197 @@ export async function getOwnBeltHistory(): Promise<BeltHistory[]> {
 
   if (error) throw new Error(error.message);
   return data ?? [];
+}
+
+// ── Self check-in from the portal ────────────────────────────────────────────
+//
+// Until now the only way to record attendance was the front-desk kiosk (or an
+// admin doing it for you), so a member whose phone was in their hand but who
+// walked past a busy desk earned nothing for the class they just took. These two
+// actions close that gap.
+//
+// There is deliberately NO time-window or geolocation gate: the gym asked for
+// unrestricted self check-in. `source: "portal"` is what makes that decision
+// auditable — staff can always tell a phone check-in from one corroborated by
+// someone standing at the desk, and undo it if it's abused.
+
+/** A class the member can check into today, for the portal's self check-in list. */
+export interface PortalTodayClass {
+  /** schedule_slots.id — also the dedup key against today's existing check-ins. */
+  id: number;
+  name: string;
+  /** "HH:MM:SS" in gym-local time. */
+  start_time: string;
+  modality_name: string | null;
+  /** True when the member already checked into this slot today. */
+  already_checked_in: boolean;
+}
+
+/**
+ * Today's classes, each flagged with whether this member already attended it.
+ *
+ * Unlike the kiosk's getTodaysClasses this returns no audience/eligibility data.
+ * The kiosk needs it to warn a walk-in at the desk; the portal doesn't gate on
+ * it, and audience rows carry gender/age criteria that shouldn't ship to a
+ * client that has no use for them.
+ */
+export async function getOwnTodayClasses(): Promise<PortalTodayClass[]> {
+  const member = await resolveOwnMember();
+  const service = createServiceClient();
+  const [pgDay, today] = await Promise.all([gymPgDay(), gymToday()]);
+
+  const [slotsResult, checkInsResult] = await Promise.all([
+    service
+      .from("schedule_slots")
+      .select("id, title, start_time, modality:class_modalities!left(name)")
+      .eq("day_of_week", pgDay)
+      .eq("active", true)
+      .order("start_time"),
+    service
+      .from("check_ins")
+      .select("schedule_slot_id, class_name")
+      .eq("member_id", member.id)
+      .eq("class_date", today),
+  ]);
+
+  if (slotsResult.error) throw new Error(slotsResult.error.message);
+
+  // Match the dedup rule in writeCheckIn: slot id when the row has one, class
+  // name otherwise. Rows without a slot id come from manually-added kiosk
+  // classes, and would otherwise let a member double-book the same class.
+  const doneSlotIds = new Set<number>();
+  const doneNames = new Set<string>();
+  for (const row of checkInsResult.data ?? []) {
+    if (row.schedule_slot_id != null) doneSlotIds.add(row.schedule_slot_id as number);
+    else doneNames.add(row.class_name as string);
+  }
+
+  type Row = {
+    id: number;
+    title: string;
+    start_time: string;
+    modality: { name: string } | { name: string }[] | null;
+  };
+
+  return ((slotsResult.data as Row[] | null) ?? []).map((s) => {
+    const modality = Array.isArray(s.modality) ? s.modality[0] : s.modality;
+    return {
+      id: s.id,
+      name: s.title,
+      start_time: s.start_time,
+      modality_name: modality?.name ?? null,
+      already_checked_in: doneSlotIds.has(s.id) || doneNames.has(s.title),
+    };
+  });
+}
+
+/**
+ * Check the authenticated member into one of today's classes.
+ *
+ * The slot id comes from the client, but the member id never does — it's
+ * resolved from the session, so the worst a tampered request can do is check
+ * the caller into a class they didn't attend, which staff can see (source
+ * "portal") and undo. Passing a member id would have made this a
+ * "check anyone in" endpoint.
+ *
+ * The slot is re-read server-side rather than trusting a class name from the
+ * client, otherwise a member could invent a class that was never on the
+ * schedule and collect XP for it.
+ */
+export async function selfCheckIn(
+  scheduleSlotId: number,
+): Promise<{ success: true; awardedBadges: AwardedBadge[] } | { error: string }> {
+  let member: { id: number };
+  try {
+    member = await resolveOwnMember();
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Not authenticated" };
+  }
+
+  const service = createServiceClient();
+  const pgDay = await gymPgDay();
+
+  const { data: slot, error: slotError } = await service
+    .from("schedule_slots")
+    .select("id, title, day_of_week, active")
+    .eq("id", scheduleSlotId)
+    .maybeSingle();
+
+  if (slotError) return { error: slotError.message };
+  if (!slot || !slot.active) return { error: "That class is not on the schedule." };
+  // A slot from another weekday means a stale page — the member left the portal
+  // open past midnight. Say so rather than silently recording the wrong day.
+  if (slot.day_of_week !== pgDay) {
+    return { error: "That class isn't scheduled today. Please refresh." };
+  }
+
+  const result = await writeCheckIn(service, {
+    memberId: member.id,
+    className: slot.title as string,
+    scheduleSlotId: slot.id as number,
+    source: "portal",
+  });
+  if (!result.ok) return { error: result.error ?? "Check-in failed" };
+
+  await logAuditEvent("CREATE", "check_ins", String(result.checkInId ?? ""), {
+    source: "member-self-checkin",
+    member_id: member.id,
+    class_name: slot.title,
+    schedule_slot_id: slot.id,
+  });
+
+  return { success: true, awardedBadges: result.awardedBadges ?? [] };
+}
+
+// ── Social team feed ─────────────────────────────────────────────────────────
+//
+// Both of these go through SECURITY DEFINER RPCs that resolve the caller
+// themselves via auth.uid() (see 20260809000000_social_team_feed.sql).
+//
+// They are therefore the ONLY portal reads here that must use the session-scoped
+// client rather than the service client. Verified against staging: a service-role
+// call succeeds but returns `[]`, because it carries no auth.uid() so
+// current_member_id() resolves to NULL. That failure mode is silent and looks
+// exactly like a gym where nobody has ever trained.
+//
+// resolveOwnMember() still runs first so the UI can distinguish "you have no
+// member row" from "nobody has trained yet".
+
+/**
+ * The team leaderboard — every active member's level, XP, streak and badge count.
+ *
+ * This is the deliberate privacy boundary of the social feature: members see
+ * each other's progress under a "First L." name, and nothing else. The gym asked
+ * for XP, badges and streaks to be visible; contact details were never part of
+ * that, and the RPC's projection is what enforces it.
+ */
+export async function getTeamLeaderboard(limit = 50): Promise<TeamMemberEntry[]> {
+  await resolveOwnMember();
+  const supabase = createClient();
+  const today = await gymToday();
+
+  const { data, error } = await supabase.rpc("get_team_leaderboard", {
+    p_today: today,
+    p_limit: limit,
+  });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as TeamMemberEntry[];
+}
+
+/**
+ * Recent check-ins and badge awards across the gym, newest first.
+ *
+ * Secret badges are filtered out inside the RPC so the feed can't spoil one for
+ * a member who hasn't earned it yet.
+ */
+export async function getTeamActivity(limit = 30, days = 14): Promise<TeamActivityEntry[]> {
+  await resolveOwnMember();
+  const supabase = createClient();
+
+  const { data, error } = await supabase.rpc("get_team_activity", {
+    p_limit: limit,
+    p_days: days,
+  });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as TeamActivityEntry[];
 }

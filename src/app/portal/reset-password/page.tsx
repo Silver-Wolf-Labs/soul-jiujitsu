@@ -67,7 +67,7 @@ export default function ResetPasswordPage() {
     return (
       <div className="min-h-screen bg-off-white flex items-center justify-center px-4">
         <div className="text-sm text-muted text-center space-y-2">
-          <div className="animate-spin w-5 h-5 border-2 border-black/10 border-t-black rounded-full mx-auto" />
+          <div className="animate-spin w-5 h-5 border-2 border-black/10 border-t-black dark:border-ink/10 dark:border-t-ink rounded-full mx-auto" />
           <p>Verifying your reset link…</p>
         </div>
       </div>
@@ -76,11 +76,11 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="min-h-screen bg-off-white flex items-start justify-center px-4">
-      <div className="max-w-sm mx-auto mt-16 w-full p-8 bg-white border border-line rounded-lg shadow-sm">
+      <div className="max-w-sm mx-auto mt-16 w-full p-8 bg-white dark:bg-portal-card border border-line rounded-lg shadow-sm">
         <div className="h-1 w-full bg-gradient-to-r from-yellow to-blue-mid to-purple-light -mx-8 -mt-8 mb-8 rounded-t-lg" style={{ width: "calc(100% + 4rem)" }} />
 
         <div className="text-center mb-6">
-          <div className="font-display text-2xl text-black tracking-tight">{profile.logoText} &bull; {profile.cityName.toUpperCase()}</div>
+          <div className="font-display text-2xl text-black dark:text-ink tracking-tight">{profile.logoText} &bull; {profile.cityName.toUpperCase()}</div>
           <div className="text-sm text-muted mt-1">Set New Password</div>
         </div>
 
@@ -104,7 +104,7 @@ export default function ResetPasswordPage() {
                 onChange={e => setPassword(e.target.value)}
                 required
                 autoFocus
-                className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black"
+                className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-yellow"
                 placeholder="Min. 10 characters — passphrase preferred"
                 autoComplete="new-password"
               />
@@ -117,7 +117,7 @@ export default function ResetPasswordPage() {
                 value={confirm}
                 onChange={e => setConfirm(e.target.value)}
                 required
-                className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black"
+                className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-yellow"
                 placeholder="Re-enter password"
                 autoComplete="new-password"
               />
@@ -130,7 +130,7 @@ export default function ResetPasswordPage() {
             <button
               type="submit"
               disabled={status === "saving"}
-              className="w-full py-2.5 bg-black text-white rounded font-semibold text-sm hover:bg-near-black disabled:opacity-50 transition-colors"
+              className="w-full py-2.5 bg-black text-white dark:bg-yellow dark:text-black rounded font-semibold text-sm hover:bg-near-black dark:hover:bg-yellow-deep disabled:opacity-50 transition-colors"
             >
               {status === "saving" ? "Saving…" : "Update Password"}
             </button>

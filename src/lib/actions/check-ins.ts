@@ -6,8 +6,13 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { requireAdmin } from "@/lib/supabase/require-admin";
 import { logAuditEvent } from "@/lib/audit";
 import { SETTINGS_KEYS } from "@/lib/settings-keys";
-import { getGymTz, gymToday, gymPgDay } from "@/lib/gym-time";
+import { gymToday, gymPgDay } from "@/lib/gym-time";
 import { parseUnlockGrace, UNLOCK_GRACE_MS, type KioskUnlockGrace } from "@/lib/kiosk-ui-config";
+import { writeCheckIn, type WriteCheckInResult } from "@/lib/check-in-core";
+
+// Re-exported for the kiosk components that already import it from here.
+// Types are erased at compile time, so this doesn't create a server action.
+export type { AwardedBadge } from "@/lib/check-in-core";
 
 /**
  * Companion cookie to `kiosk_token`. Holds the epoch-ms at which the
@@ -478,205 +483,18 @@ export async function getMemberTodayCheckIns(memberId: number): Promise<string[]
 
 // ── Record check-in ───────────────────────────────────────────────────────────
 
-/**
- * A badge unlocked by a just-recorded check-in, as returned by the
- * evaluate_member_badges RPC. Shaped for the kiosk celebration screen.
- */
-export interface AwardedBadge {
-  badge_slug: string;
-  badge_name: string;
-  /** lucide-react icon name — resolve through badgeIcon(). */
-  badge_icon: string;
-  badge_tier: "bronze" | "silver" | "gold" | "legendary";
-}
-
 export async function recordCheckIn(
   memberId: number,
   className: string,
   scheduleSlotId?: number | null
-): Promise<{ ok: boolean; error?: string; checkInId?: number; awardedBadges?: AwardedBadge[] }> {
+): Promise<WriteCheckInResult> {
   await requireKioskSession();
-
-  const supabase = kioskClient();
-
-  // Prevent double check-in for the same slot/class on the same day.
-  // When a scheduleSlotId is available use it (handles same-name classes at
-  // different times). Fall back to class_name match when there is no slot ID.
-  const today = await gymToday();
-  const dupQuery = supabase
-    .from("check_ins")
-    .select("id", { count: "exact", head: true })
-    .eq("member_id", memberId)
-    .eq("class_date", today);
-
-  const { count } = scheduleSlotId
-    ? await dupQuery.eq("schedule_slot_id", scheduleSlotId)
-    : await dupQuery.eq("class_name", className);
-
-  if ((count ?? 0) > 0) {
-    return { ok: false, error: "Already checked in to this class today" };
-  }
-
-  // Resolve the slot's teachers. Multi-instructor classes credit every
-  // teacher via `check_in_instructors`; the scalar `check_ins.instructor_id`
-  // column mirrors the primary for backward compatibility with existing
-  // reads. Taxonomy (modality / level / focus / audience) is snapshotted
-  // by the separate `snapshot_check_in_taxonomy` RPC call below.
-  const assignments = await resolveSlotInstructors(supabase, scheduleSlotId);
-  const primary = assignments[0] ?? { instructor_id: null, instructor_name: null };
-
-  // Return the new id so the kiosk success screen can offer a same-session
-  // "Oops, undo" action without having to re-query.
-  const { data, error } = await supabase
-    .from("check_ins")
-    .insert({
-      member_id: memberId,
-      schedule_slot_id: scheduleSlotId ?? null,
-      class_name: className,
-      class_date: today,
-      source: "kiosk",
-      instructor_id: primary.instructor_id,
-      instructor_name: primary.instructor_name,
-    })
-    .select("id")
-    .single();
-
-  if (error) return { ok: false, error: error.message };
-  const checkInId = data?.id as number | undefined;
-  if (checkInId && assignments.length > 0) {
-    await writeCheckInInstructors(supabase, checkInId, assignments);
-  }
-  // Snapshot the slot's taxonomy (modality / level scalars + focus /
-  // audience junctions). Non-fatal if the slot has no taxonomy — we log
-  // the exception inside the helper but don't propagate to the caller,
-  // since the check-in row itself is already durable.
-  if (checkInId && scheduleSlotId) {
-    await snapshotCheckInTaxonomy(supabase, checkInId, scheduleSlotId);
-  }
-  // XP + auto-badges. Runs after the taxonomy snapshot because the modality
-  // badge rules read the snapshotted slot data.
-  const awardedBadges = checkInId
-    ? await awardGamification(supabase, checkInId, memberId)
-    : [];
-  return { ok: true, checkInId, awardedBadges };
-}
-
-/**
- * Grant XP for a check-in and award any auto-badges it just unlocked.
- *
- * Non-fatal by design, exactly like the taxonomy snapshot above: the check-in
- * row is already durable and attendance is the number the gym bills on, so a
- * gamification failure must never surface as a failed check-in. The RPCs are
- * idempotent, so anything missed here is recovered by re-running
- * `SELECT public.backfill_gamification();`.
- *
- * Returns the badges awarded so the kiosk can celebrate them on screen.
- */
-async function awardGamification(
-  supabase: ReturnType<typeof createServiceClient>,
-  checkInId: number,
-  memberId: number,
-): Promise<AwardedBadge[]> {
-  try {
-    const today = await gymToday();
-    // XP first: evaluate_member_badges credits badge XP into the same ledger,
-    // and a streak badge should be judged with today's class already counted.
-    await supabase.rpc("award_check_in_xp", { p_check_in_id: checkInId });
-
-    const { data, error } = await supabase.rpc("evaluate_member_badges", {
-      p_member_id: memberId,
-      p_today: today,
-    });
-    if (error) throw new Error(error.message);
-
-    return (data ?? []) as AwardedBadge[];
-  } catch (e) {
-    console.error("[gamification] award failed for check-in", checkInId, e);
-    return [];
-  }
-}
-
-/**
- * Snapshot the slot's taxonomy (modality / level scalars + focus /
- * audience junctions) onto a just-inserted check-in row.
- *
- * Called from both kiosk and admin write paths. The RPC is gated with
- * `GRANT EXECUTE ... TO service_role` only — callers are already using
- * a service-role client after `requireKioskSession()` or `requireAdmin()`.
- *
- * Scalar snapshot failures surface as an exception (primary correctness
- * signal). Focus/audience junction-insert failures are trapped inside
- * the RPC's nested EXCEPTION blocks and do NOT reach us — those are
- * analytics nice-to-haves, not a reason to roll back the check-in.
- */
-async function snapshotCheckInTaxonomy(
-  supabase: ReturnType<typeof createServiceClient>,
-  checkInId: number,
-  slotId: number | null | undefined,
-): Promise<void> {
-  if (!slotId) return;
-  const { error } = await supabase.rpc("snapshot_check_in_taxonomy", {
-    p_check_in_id: checkInId,
-    p_slot_id:     slotId,
+  return writeCheckIn(kioskClient(), {
+    memberId,
+    className,
+    scheduleSlotId,
+    source: "kiosk",
   });
-  if (error) {
-    // Non-fatal from the user's perspective — the check-in itself
-    // succeeded. Log loudly so analytics gaps surface in operator logs
-    // instead of silently compounding.
-    console.error("[snapshot_check_in_taxonomy] RPC failed:", error.message);
-  }
-}
-
-/**
- * Read the slot's teacher assignments (instructors junction) in
- * primary-first order, each carrying a fresh name snapshot.
- * Returns `[]` when `slotId` is null or the slot has no instructors.
- */
-async function resolveSlotInstructors(
-  supabase: ReturnType<typeof createServiceClient>,
-  slotId: number | null | undefined,
-): Promise<{ instructor_id: number | null; instructor_name: string | null }[]> {
-  if (!slotId) return [];
-  const { data } = await supabase
-    .from("schedule_slot_instructors")
-    .select("instructor_id, sort_order, instructors!inner(id, name)")
-    .eq("schedule_slot_id", slotId)
-    .order("sort_order", { ascending: true });
-  if (!data || data.length === 0) return [];
-  return data.map(row => {
-    const r = row as unknown as {
-      instructor_id: number;
-      sort_order: number;
-      instructors: { id: number; name: string } | { id: number; name: string }[] | null;
-    };
-    const inst = Array.isArray(r.instructors) ? r.instructors[0] : r.instructors;
-    return {
-      instructor_id: r.instructor_id,
-      instructor_name: inst?.name ?? null,
-    };
-  });
-}
-
-/** Fan out attribution rows for a check-in. Idempotent per check_in_id. */
-async function writeCheckInInstructors(
-  supabase: ReturnType<typeof createServiceClient>,
-  checkInId: number,
-  assignments: { instructor_id: number | null; instructor_name: string | null }[],
-): Promise<void> {
-  if (assignments.length === 0) return;
-  const rows = assignments.map((a, i) => ({
-    check_in_id: checkInId,
-    instructor_id: a.instructor_id,
-    instructor_name: a.instructor_name,
-    sort_order: i,
-  }));
-  const { error } = await supabase.from("check_in_instructors").insert(rows);
-  if (error) {
-    // Non-fatal: the check-in itself succeeded. Attribution can be
-    // back-filled from the scalar `check_ins.instructor_id` as a
-    // fallback. Log and continue.
-    console.error("[check_in_instructors] insert failed:", error.message);
-  }
 }
 
 /**
@@ -817,49 +635,21 @@ export async function adminRecordCheckIn(
   scheduleSlotId?: number | null
 ): Promise<void> {
   await requireAdmin();
-  const supabase = createClient();
 
-  // Mirror the kiosk-side snapshot so admin-originated check-ins carry the
-  // same attribution as kiosk ones. Analytics treats both sources uniformly.
-  const svc = supabase as unknown as ReturnType<typeof createServiceClient>;
-  const assignments = await resolveSlotInstructors(svc, scheduleSlotId);
-  const primary = assignments[0] ?? { instructor_id: null, instructor_name: null };
+  // Service-role rather than the admin's own client: the taxonomy snapshot RPC
+  // is `GRANT EXECUTE ... TO service_role` only (mirrors belt_history_tx's
+  // security model). requireAdmin() above is the gate before we escalate.
+  const result = await writeCheckIn(createServiceClient(), {
+    memberId,
+    className,
+    scheduleSlotId,
+    source: "admin",
+    // Staff sometimes record attendance the morning after, so unlike the kiosk
+    // and portal paths this one lets the caller name the date.
+    classDate,
+  });
+  if (!result.ok) throw new Error(result.error ?? "Check-in failed");
 
-  const { data: inserted, error } = await supabase
-    .from("check_ins")
-    .insert({
-      member_id: memberId,
-      schedule_slot_id: scheduleSlotId ?? null,
-      class_name: className,
-      class_date: classDate,
-      source: "admin",
-      instructor_id: primary.instructor_id,
-      instructor_name: primary.instructor_name,
-    })
-    .select("id")
-    .single();
-  if (error) throw new Error(error.message);
-  if (inserted?.id && assignments.length > 0) {
-    await writeCheckInInstructors(
-      supabase as unknown as ReturnType<typeof createServiceClient>,
-      inserted.id as number,
-      assignments,
-    );
-  }
-  // Snapshot the taxonomy for admin-originated check-ins so analytics
-  // treats admin + kiosk rows uniformly. We bounce off the service client
-  // because `snapshot_check_in_taxonomy` is GRANT EXECUTE ... TO
-  // service_role only (mirrors belt_history_tx's security model).
-  // `requireAdmin()` at the top of this function is the authorization
-  // gate before we escalate.
-  if (inserted?.id && scheduleSlotId) {
-    await snapshotCheckInTaxonomy(createServiceClient(), inserted.id as number, scheduleSlotId);
-  }
-  // Same gamification credit as the kiosk path, so a member marked present by
-  // an admin isn't quietly denied the XP and streak they actually earned.
-  if (inserted?.id) {
-    await awardGamification(createServiceClient(), inserted.id as number, memberId);
-  }
   await logAuditEvent("CREATE", "check_ins", String(memberId), { class_name: className, class_date: classDate });
 }
 

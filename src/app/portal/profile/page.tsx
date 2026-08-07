@@ -14,6 +14,7 @@ import BeltVisual from "@/components/ui/BeltVisual";
 import Spinner, { SpinnerButton } from "@/components/ui/Spinner";
 import BeltHistoryList from "@/components/member/BeltHistoryList";
 import CheckInsList from "@/components/member/CheckInsList";
+import { SIGNATURE_INK, SIGNATURE_PAPER } from "@/components/signature/SignatureCanvas";
 import type {
   Member, MemberMembership, MembershipPlan, MembershipStatus,
   WaiverTemplate, WaiverSignature, BeltHistory, CheckInRow,
@@ -96,7 +97,11 @@ function SignatureCanvas({
     if (!c) return null;
     const ctx = c.getContext("2d");
     if (!ctx) return null;
-    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-ink').trim() || '#1a1a1a';
+    // Fixed ink, never the theme's --color-ink. The portal renders dark, and a
+    // light stroke would produce a signature that is invisible here and, worse,
+    // invisible on the white background the admin console and printed waiver use.
+    // A signature is a legal record; it must not depend on the active theme.
+    ctx.strokeStyle = SIGNATURE_INK;
     ctx.lineWidth = 2.5;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -133,9 +138,26 @@ function SignatureCanvas({
 
   function onEnd() { drawing.current = false; }
 
+  // Paint the paper rather than relying on the canvas being transparent over a
+  // `bg-white` element: toDataURL() captures the bitmap, not the CSS behind it,
+  // so a cleared-to-transparent canvas exports a signature with no background.
+  // That renders as ink-on-white in most viewers but as ink-on-dark wherever the
+  // PNG is composited over a dark surface — including this very page.
+  function fillPaper(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement) {
+    ctx.fillStyle = SIGNATURE_PAPER;
+    ctx.fillRect(0, 0, c.width, c.height);
+  }
+
+  useEffect(() => {
+    const c = canvasRef.current;
+    const ctx = c?.getContext("2d");
+    if (c && ctx) fillPaper(ctx, c);
+  }, []);
+
   function clear() {
     const c = canvasRef.current; if (!c) return;
-    c.getContext("2d")?.clearRect(0, 0, c.width, c.height);
+    const ctx = c.getContext("2d");
+    if (ctx) fillPaper(ctx, c);
     onData(null);
   }
 
@@ -145,7 +167,7 @@ function SignatureCanvas({
         ref={canvasRef}
         width={700}
         height={200}
-        className="w-full border-2 border-dashed border-line rounded-lg bg-white cursor-crosshair"
+        className="w-full border-2 border-dashed border-line rounded-lg cursor-crosshair"
         style={{ touchAction: "none" }}
         onMouseDown={onStart} onMouseMove={onMove} onMouseUp={onEnd} onMouseLeave={onEnd}
         onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}
@@ -190,12 +212,12 @@ function WaiverModal({
   return (
     <div className="fixed inset-0 z-[60] flex flex-col md:items-center md:justify-center bg-black/50 backdrop-blur-sm">
       {/* Panel: full screen mobile, large centered desktop */}
-      <div className="bg-white w-full h-full flex flex-col md:h-auto md:max-h-[92vh] md:max-w-3xl md:rounded-2xl md:overflow-hidden md:shadow-2xl">
+      <div className="bg-white dark:bg-portal-card w-full h-full flex flex-col md:h-auto md:max-h-[92vh] md:max-w-3xl md:rounded-2xl md:overflow-hidden md:shadow-2xl">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-line flex-shrink-0">
           <div>
-            <div className="font-display text-lg text-black tracking-wide">{template.title}</div>
+            <div className="font-display text-lg text-black dark:text-ink tracking-wide">{template.title}</div>
             <div className="text-xs text-muted mt-0.5">
               Version {template.version}
               {existingSignature
@@ -226,7 +248,7 @@ function WaiverModal({
         </div>
 
         {/* Bottom section */}
-        <div className="flex-shrink-0 border-t border-line px-5 py-4 md:px-8 space-y-4 bg-white">
+        <div className="flex-shrink-0 border-t border-line px-5 py-4 md:px-8 space-y-4 bg-white dark:bg-portal-card">
           {mode === "sign" ? (
             <>
               <div>
@@ -237,7 +259,7 @@ function WaiverModal({
               <button
                 onClick={handleSign}
                 disabled={signing || !signatureData}
-                className="w-full py-3 bg-black text-white rounded-lg font-semibold text-sm hover:bg-near-black disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="w-full py-3 bg-black text-white dark:bg-yellow dark:text-black rounded-lg font-semibold text-sm hover:bg-near-black dark:hover:bg-yellow-deep disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 {signing ? <SpinnerButton label="Signing" /> : "I agree — Sign Waiver"}
               </button>
@@ -287,7 +309,7 @@ function SignatureViewer({
 
   const attribution = (
     <p className="text-xs text-muted mt-1">
-      Signed as <span className="font-semibold text-black tracking-widest">{attributionInitials}</span> on {formatDateTimeTz(signature.signed_at, timezone)}
+      Signed as <span className="font-semibold text-black dark:text-ink tracking-widest">{attributionInitials}</span> on {formatDateTimeTz(signature.signed_at, timezone)}
     </p>
   );
 
@@ -295,7 +317,7 @@ function SignatureViewer({
     return (
       <div>
         <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Your Initials</div>
-        <div className="border border-line rounded-lg bg-off-white px-4 py-3 text-2xl font-semibold tracking-[0.3em] text-black text-center select-none">
+        <div className="border border-line rounded-lg bg-off-white px-4 py-3 text-2xl font-semibold tracking-[0.3em] text-black dark:text-ink text-center select-none">
           {signature.typed_initials}
         </div>
         {attribution}
@@ -308,6 +330,10 @@ function SignatureViewer({
       <div>
         <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Your Signature</div>
         {imgUrl ? (
+          // bg-white with NO dark: variant, deliberately. The stored PNG is
+          // ink-on-white (see SIGNATURE_PAPER); painting a dark card behind it
+          // would frame a white rectangle in a dark box, and for a transparent
+          // legacy PNG it would hide the signature entirely.
           // eslint-disable-next-line @next/next/no-img-element
           <img src={imgUrl} alt="Your signature" className="max-w-sm w-full border border-line rounded-lg bg-white p-2" />
         ) : (
@@ -325,6 +351,7 @@ function SignatureViewer({
     return (
       <div>
         <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Your Signature</div>
+        {/* Literal white, no dark: variant — same reason as the drawn case above. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={signature.signature_data} alt="Your signature" className="max-w-sm w-full border border-line rounded-lg bg-white p-2" />
         {attribution}
@@ -374,7 +401,7 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
-      <h1 className="font-display text-2xl text-black">My Profile</h1>
+      <h1 className="font-display text-2xl text-black dark:text-ink">My Profile</h1>
 
       {/* Tab bar */}
       <div className="flex gap-0 border-b border-line overflow-x-auto">
@@ -384,7 +411,7 @@ export default function ProfilePage() {
             onClick={() => setActiveTab(tab.id)}
             className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors ${
               activeTab === tab.id
-                ? "border-b-2 border-black text-black"
+                ? "border-b-2 border-black text-black dark:border-yellow dark:text-ink"
                 : "border-b-2 border-transparent text-muted hover:text-ink"
             }`}
           >
@@ -394,7 +421,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Tab content */}
-      <div className="bg-white border border-line rounded-lg p-6">
+      <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-6">
         {activeTab === "personal"  && <PersonalInfoTab member={member} onSave={u => setMember({ ...member, ...u })} />}
         {activeTab === "emergency" && <EmergencyContactTab member={member} onSave={u => setMember({ ...member, ...u })} />}
         {activeTab === "training"  && <TrainingTab member={member} memberships={memberships} onSave={u => setMember({ ...member, ...u })} />}
@@ -461,7 +488,7 @@ function PersonalInfoTab({
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
             required
-            className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black"
+            className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-yellow"
           />
         </div>
         <div>
@@ -472,7 +499,7 @@ function PersonalInfoTab({
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
             required
-            className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black"
+            className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-yellow"
           />
         </div>
       </div>
@@ -497,7 +524,7 @@ function PersonalInfoTab({
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           type="tel"
-          className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black"
+          className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-yellow"
           placeholder="(555) 000-0000"
         />
       </div>
@@ -510,7 +537,7 @@ function PersonalInfoTab({
           <select
             value={birthMonth}
             onChange={(e) => setBirthMonth(e.target.value ? Number(e.target.value) : "")}
-            className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black"
+            className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-yellow"
           >
             <option value="">Month</option>
             {Array.from({ length: 12 }, (_, i) => (
@@ -531,7 +558,7 @@ function PersonalInfoTab({
             min={1900}
             max={new Date().getFullYear()}
             placeholder="YYYY"
-            className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black"
+            className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-yellow"
           />
         </div>
         <div>
@@ -541,7 +568,7 @@ function PersonalInfoTab({
           <select
             value={gender}
             onChange={(e) => setGender(e.target.value)}
-            className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black"
+            className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-yellow"
           >
             <option value="">Select…</option>
             <option value="male">Male</option>
@@ -566,7 +593,7 @@ function PersonalInfoTab({
       <button
         type="submit"
         disabled={isPending || status === "saving"}
-        className="px-4 py-2 bg-black text-white rounded text-sm font-semibold hover:bg-near-black disabled:opacity-50 transition-colors"
+        className="px-4 py-2 bg-black text-white dark:bg-yellow dark:text-black rounded text-sm font-semibold hover:bg-near-black dark:hover:bg-yellow-deep disabled:opacity-50 transition-colors"
       >
         {status === "saving" ? "Saving…" : "Save Changes"}
       </button>
@@ -609,7 +636,7 @@ function EmergencyContactTab({
   }
 
   const labelClass = "block text-xs font-semibold text-muted uppercase tracking-wide mb-1";
-  const inputClass = "w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black";
+  const inputClass = "w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-yellow";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 max-w-md">
@@ -642,7 +669,7 @@ function EmergencyContactTab({
       <button
         type="submit"
         disabled={isPending || status === "saving"}
-        className="px-4 py-2 bg-black text-white rounded text-sm font-semibold hover:bg-near-black disabled:opacity-50 transition-colors"
+        className="px-4 py-2 bg-black text-white dark:bg-yellow dark:text-black rounded text-sm font-semibold hover:bg-near-black dark:hover:bg-yellow-deep disabled:opacity-50 transition-colors"
       >
         {status === "saving" ? "Saving…" : "Save Changes"}
       </button>
@@ -700,7 +727,7 @@ function PaymentMethodsTab() {
           <button
             onClick={handleManageBilling}
             disabled={loading}
-            className="px-4 py-2 bg-black text-white border border-black rounded text-sm font-semibold hover:bg-near-black transition-colors disabled:opacity-50"
+            className="px-4 py-2 bg-black text-white dark:bg-yellow dark:text-black border border-black dark:border-yellow rounded text-sm font-semibold hover:bg-near-black dark:hover:bg-yellow-deep transition-colors disabled:opacity-50"
           >
             {loading ? "Opening…" : "Manage Billing"}
           </button>
@@ -857,7 +884,7 @@ function TrainingTab({
   }
 
   const labelClass = "block text-xs font-semibold text-muted uppercase tracking-wide mb-1";
-  const inputClass = "border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black";
+  const inputClass = "border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-yellow";
 
   return (
     <div className="lg:grid lg:grid-cols-2 lg:gap-8">
@@ -878,18 +905,18 @@ function TrainingTab({
       {/* Stats grid */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-off-white rounded-lg px-4 py-3">
-          <div className="font-display text-lg text-black leading-tight">{gymJoinedDate}</div>
+          <div className="font-display text-lg text-black dark:text-ink leading-tight">{gymJoinedDate}</div>
           <div className="text-xs text-muted mt-0.5">joined {gymProfile.shortName}</div>
         </div>
         {activeMembershipYears && (
           <div className="bg-off-white rounded-lg px-4 py-3">
-            <div className="font-display text-2xl text-black">{activeMembershipYears}y</div>
+            <div className="font-display text-2xl text-black dark:text-ink">{activeMembershipYears}y</div>
             <div className="text-xs text-muted mt-0.5">active at gym</div>
           </div>
         )}
         {yearsTraining && (
           <div className="bg-off-white rounded-lg px-4 py-3">
-            <div className="font-display text-2xl text-black">{yearsTraining}y</div>
+            <div className="font-display text-2xl text-black dark:text-ink">{yearsTraining}y</div>
             <div className="text-xs text-muted mt-0.5">training BJJ total</div>
           </div>
         )}
@@ -897,7 +924,7 @@ function TrainingTab({
             belt has no awarding event, so there's no duration to show. */}
         {yearsOnBelt && belt !== "white" && (
           <div className="bg-off-white rounded-lg px-4 py-3">
-            <div className="font-display text-2xl text-black">{yearsOnBelt}y</div>
+            <div className="font-display text-2xl text-black dark:text-ink">{yearsOnBelt}y</div>
             <div className="text-xs text-muted mt-0.5">on this belt</div>
           </div>
         )}
@@ -939,7 +966,7 @@ function TrainingTab({
       <button
         type="submit"
         disabled={isPending || status === "saving"}
-        className="px-4 py-2 bg-black text-white rounded text-sm font-semibold hover:bg-near-black disabled:opacity-50 transition-colors"
+        className="px-4 py-2 bg-black text-white dark:bg-yellow dark:text-black rounded text-sm font-semibold hover:bg-near-black dark:hover:bg-yellow-deep disabled:opacity-50 transition-colors"
       >
         {status === "saving" ? "Saving…" : "Save Changes"}
       </button>
@@ -1033,7 +1060,7 @@ function WaiverTab({
       {template && (
         <button
           onClick={() => setShowModal(true)}
-          className="px-5 py-2.5 bg-black text-white rounded-lg text-sm font-semibold hover:bg-near-black transition-colors"
+          className="px-5 py-2.5 bg-black text-white dark:bg-yellow dark:text-black rounded-lg text-sm font-semibold hover:bg-near-black dark:hover:bg-yellow-deep transition-colors"
         >
           {signed ? "View Waiver & Signature" : "Read & Sign Waiver"}
         </button>
@@ -1171,7 +1198,7 @@ function ActivityTab({ memberships }: { memberships: MemberMembershipWithPlan[] 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {metrics.map((m) => (
           <div key={m.label} className="border border-line rounded-lg p-4 text-center">
-            <div className="font-display text-2xl text-black truncate">{m.value}</div>
+            <div className="font-display text-2xl text-black dark:text-ink truncate">{m.value}</div>
             <div className="text-xs text-muted mt-1">{m.label}</div>
           </div>
         ))}

@@ -5,6 +5,14 @@ const config: Config = {
   content: [
     "./src/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  // Attribute-scoped rather than the usual `prefers-color-scheme` or a root
+  // `.dark` class. Only the member portal has a dark theme — the admin console
+  // and the public site are light-only, and the kiosk has its own fixed dark
+  // design that predates this. Keying the variant to an attribute the portal
+  // layout owns means a `dark:` utility inside a component shared with admin
+  // (CheckInsList, BeltHistoryList) is simply inert there, so the two themes
+  // can't leak into each other.
+  darkMode: ["selector", '[data-portal-theme="dark"]'],
   theme: {
     extend: {
       colors: {
@@ -13,6 +21,14 @@ const config: Config = {
         black:        "#000000",
         "off-white":  "var(--color-off-white)",
         paper:        "var(--color-paper)",
+        // Member-portal card surface. Only meaningful behind a `dark:` variant
+        // (`bg-white dark:bg-portal-card`) — in light mode it resolves to the
+        // same white the card already was. Exists because Tailwind's `white` is
+        // literal hex on purpose and must stay that way; see portal-dark.css.
+        "portal-card": {
+          DEFAULT: "var(--color-portal-card)",
+          hover:   "var(--color-portal-card-hover)",
+        },
         "near-black": "var(--color-near-black)",
         ink:          "var(--color-ink)",
         muted:        "var(--color-muted)",

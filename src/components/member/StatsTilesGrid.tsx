@@ -114,10 +114,14 @@ function TabToggle({
       ? "flex w-full rounded-xl bg-white/5 p-1 mb-3"
       : "flex w-full rounded-lg bg-line/50 p-1 mb-3";
 
+  // The light variant's active pill needs a dark: partner. `variant` is about
+  // which *surface* the grid sits on (kiosk overlay vs card), which is decided by
+  // the caller; the portal passes "light" and then themes the card itself, so the
+  // pill has to follow the theme rather than the variant.
   const activeCls =
     variant === "dark"
       ? "bg-white/15 text-white"
-      : "bg-white text-ink shadow-sm";
+      : "bg-white dark:bg-line text-ink shadow-sm";
 
   const inactiveCls =
     variant === "dark"

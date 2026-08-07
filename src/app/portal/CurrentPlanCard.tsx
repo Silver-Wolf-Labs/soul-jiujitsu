@@ -71,11 +71,11 @@ export default function CurrentPlanCard({
 
   return (
     <>
-      <div className="bg-white border border-line rounded-lg p-5">
+      <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5">
         <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Current Plan</div>
         {plan && activeMembership ? (
           <>
-            <div className="font-display text-lg text-black">{plan.name}</div>
+            <div className="font-display text-lg text-black dark:text-ink">{plan.name}</div>
             <div className="text-sm text-muted mt-1">
               {effectivePrice !== null ? formatCents(effectivePrice) : "—"} / {plan.billing_interval}
             </div>
@@ -117,7 +117,10 @@ export default function CurrentPlanCard({
                   <button
                     onClick={handleCancel}
                     disabled={isCanceling}
-                    className="px-3 py-1 bg-danger text-white text-xs font-semibold rounded hover:brightness-90 transition-all disabled:opacity-50"
+                    // dark:text-black, not text-white: `danger` inverts to a light
+                    // red tint on dark, so white-on-danger measures 1.9:1 there.
+                    // Black on that same tint is 11:1.
+                    className="px-3 py-1 bg-danger text-white dark:text-black text-xs font-semibold rounded hover:brightness-90 transition-all disabled:opacity-50"
                   >
                     {isCanceling ? <SpinnerButton label="Canceling" /> : "Confirm Cancel"}
                   </button>
@@ -220,12 +223,12 @@ function PlanSelectionModal({ onClose }: { onClose: () => void }) {
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       {/* Panel: slide-up sheet on mobile, centered modal on desktop */}
-      <div className="bg-white w-full flex flex-col rounded-t-2xl max-h-[92dvh] md:rounded-2xl md:max-w-4xl md:max-h-[88vh] md:shadow-2xl overflow-hidden">
+      <div className="bg-white dark:bg-portal-card w-full flex flex-col rounded-t-2xl max-h-[92dvh] md:rounded-2xl md:max-w-4xl md:max-h-[88vh] md:shadow-2xl overflow-hidden">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-line flex-shrink-0">
           <div>
-            <div className="font-display text-xl text-black tracking-tight">Choose a Membership Plan</div>
+            <div className="font-display text-xl text-black dark:text-ink tracking-tight">Choose a Membership Plan</div>
             <div className="text-xs text-muted mt-0.5">Month-to-month · No contracts · Cancel with 10 days notice</div>
           </div>
           <button
@@ -295,7 +298,7 @@ function PlanCard({
 
   return (
     <div
-      className="relative flex flex-col bg-white rounded-lg p-6 transition-shadow duration-200 hover:shadow-xl"
+      className="relative flex flex-col bg-white dark:bg-portal-card rounded-lg p-6 transition-shadow duration-200 hover:shadow-xl"
       style={borderStyle}
     >
       {showBadge && (
@@ -327,8 +330,10 @@ function PlanCard({
         disabled={disabled}
         className={`mt-auto w-full py-2.5 rounded text-[12px] font-bold tracking-wider uppercase transition-all duration-150 border ${
           showBadge
-            ? "bg-black text-white border-black hover:bg-near-black disabled:opacity-40"
-            : "bg-white text-ink border-line hover:border-black hover:bg-black hover:text-white disabled:opacity-40"
+            ? "bg-black text-white dark:bg-yellow dark:text-black border-black dark:border-yellow hover:bg-near-black dark:hover:bg-yellow-deep disabled:opacity-40"
+            // The hover state needs its own dark triplet: hovering to
+            // black-on-black would blank the button out on a dark card.
+            : "bg-white dark:bg-portal-card text-ink border-line hover:border-black hover:bg-black hover:text-white dark:hover:border-yellow dark:hover:bg-yellow dark:hover:text-black disabled:opacity-40"
         } disabled:cursor-not-allowed`}
       >
         {enrolling ? <SpinnerButton label="Enrolling" /> : "Enroll Now"}

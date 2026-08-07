@@ -35,9 +35,9 @@ export default function Modal({ open, onClose, title, subtitle, children }: Prop
     >
       <div
         ref={contentRef}
-        className="bg-white w-full h-full overflow-y-auto md:h-auto md:rounded-lg md:max-w-[420px] md:max-h-[90vh] md:shadow-2xl p-5 sm:p-7"
+        className="bg-white dark:bg-portal-card w-full h-full overflow-y-auto md:h-auto md:rounded-lg md:max-w-[420px] md:max-h-[90vh] md:shadow-2xl p-5 sm:p-7"
       >
-        <h3 className="font-display text-[26px] text-black mb-1">{title}</h3>
+        <h3 className="font-display text-[26px] text-black dark:text-ink mb-1">{title}</h3>
         {subtitle && <p className="text-xs text-muted mb-5">{subtitle}</p>}
         {children}
       </div>

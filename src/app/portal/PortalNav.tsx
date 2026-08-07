@@ -51,9 +51,9 @@ export default function PortalNav() {
   }
 
   return (
-    <nav className="bg-white border-b border-line">
+    <nav className="bg-white dark:bg-portal-card border-b border-line">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-        <Link href="/portal" className="font-display text-lg text-black tracking-tight">
+        <Link href="/portal" className="font-display text-lg text-black dark:text-ink tracking-tight">
           {profile.logoText} &bull; {profile.cityName.toUpperCase()}
         </Link>
 

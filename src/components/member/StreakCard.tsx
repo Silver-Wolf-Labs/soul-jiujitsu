@@ -15,7 +15,7 @@ export default function StreakCard({ data }: { data: MemberGamification }) {
   const isRecord = alive && data.streak_days >= data.longest_streak;
 
   return (
-    <div className="bg-white border border-line rounded-lg p-5 flex flex-col">
+    <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5 flex flex-col">
       <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Streak</div>
 
       <div className="flex items-baseline gap-2">
@@ -24,7 +24,7 @@ export default function StreakCard({ data }: { data: MemberGamification }) {
           style={alive ? { color: colors.orange } : undefined}
           aria-hidden="true"
         />
-        <span className={`font-display text-3xl leading-none ${alive ? "text-black" : "text-muted"}`}>
+        <span className={`font-display text-3xl leading-none ${alive ? "text-black dark:text-ink" : "text-muted"}`}>
           {data.streak_days}
         </span>
         <span className="text-sm text-muted">
@@ -34,7 +34,7 @@ export default function StreakCard({ data }: { data: MemberGamification }) {
 
       <div className="mt-2 text-xs text-muted">
         {isRecord && data.streak_days > 1 ? (
-          <span className="font-semibold text-black">Personal best — keep it going</span>
+          <span className="font-semibold text-black dark:text-ink">Personal best — keep it going</span>
         ) : alive ? (
           <>Best: {data.longest_streak} day{data.longest_streak === 1 ? "" : "s"}</>
         ) : data.longest_streak > 0 ? (

@@ -48,7 +48,7 @@ export default function BadgeCelebration({ unseen }: { unseen: EarnedBadge[] }) 
         </div>
 
         <div>
-          <div className="font-display text-2xl text-black">{current.badge.name}</div>
+          <div className="font-display text-2xl text-black dark:text-ink">{current.badge.name}</div>
           <div className="text-xs uppercase tracking-wide mt-0.5" style={{ color: tier.fg }}>
             {tier.label}
           </div>
@@ -67,7 +67,7 @@ export default function BadgeCelebration({ unseen }: { unseen: EarnedBadge[] }) 
         <button
           type="button"
           onClick={() => (isLast ? setOpen(false) : setIndex(index + 1))}
-          className="mt-2 w-full py-2.5 bg-black text-white rounded font-semibold text-sm hover:bg-near-black transition-colors"
+          className="mt-2 w-full py-2.5 bg-black text-white dark:bg-yellow dark:text-black rounded font-semibold text-sm hover:bg-near-black dark:hover:bg-yellow-deep transition-colors"
         >
           {isLast ? "¡Gracias!" : "Siguiente"}
         </button>

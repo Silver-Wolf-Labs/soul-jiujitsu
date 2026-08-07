@@ -77,8 +77,8 @@ function LoginForm() {
             required
             autoComplete="email"
             inputMode="email"
-            className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black"
-            placeholder="you@example.com"
+            className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-yellow"
+            placeholder="tu@correo.com"
           />
         </div>
 
@@ -87,7 +87,7 @@ function LoginForm() {
             <label className="block text-xs font-semibold text-muted uppercase tracking-wide">
               Password
             </label>
-            <Link href="/portal/forgot-password" className="text-xs text-muted hover:text-black underline underline-offset-2 transition-colors">
+            <Link href="/portal/forgot-password" className="text-xs text-muted hover:text-black dark:hover:text-ink underline underline-offset-2 transition-colors">
               Forgot password?
             </Link>
           </div>
@@ -96,7 +96,7 @@ function LoginForm() {
             name="password"
             required
             autoComplete="current-password"
-            className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black"
+            className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-yellow"
             placeholder="••••••••"
           />
         </div>
@@ -110,7 +110,7 @@ function LoginForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-2.5 bg-black text-white rounded font-semibold text-sm hover:bg-near-black disabled:opacity-50 transition-colors"
+          className="w-full py-2.5 bg-black text-white dark:bg-yellow dark:text-black rounded font-semibold text-sm hover:bg-near-black dark:hover:bg-yellow-deep disabled:opacity-50 transition-colors"
         >
           {loading ? <SpinnerButton label="Signing in" /> : "Sign In"}
         </button>
@@ -118,7 +118,7 @@ function LoginForm() {
 
       <p className="mt-6 text-center text-sm text-muted">
         New member?{" "}
-        <Link href="/join" className="text-black underline underline-offset-2 hover:opacity-70">
+        <Link href="/join" className="text-black dark:text-ink underline underline-offset-2 hover:opacity-70">
           Join here
         </Link>
       </p>
@@ -139,11 +139,11 @@ export default function PortalLoginPage() {
   const profile = useGymProfile();
   return (
     <div className="min-h-screen bg-off-white flex items-start justify-center">
-      <div className="max-w-sm mx-auto mt-16 w-full p-8 bg-white border border-line rounded-lg shadow-sm">
+      <div className="max-w-sm mx-auto mt-16 w-full p-8 bg-white dark:bg-portal-card border border-line rounded-lg shadow-sm">
         <div className="h-1 w-full bg-gradient-to-r from-yellow to-blue-mid to-purple-light -mx-8 -mt-8 mb-8 rounded-t-lg" style={{ width: "calc(100% + 4rem)" }} />
 
         <div className="text-center mb-6">
-          <div className="font-display text-2xl text-black tracking-tight">{profile.logoText} &bull; {profile.cityName.toUpperCase()}</div>
+          <div className="font-display text-2xl text-black dark:text-ink tracking-tight">{profile.logoText} &bull; {profile.cityName.toUpperCase()}</div>
           <div className="text-sm text-muted mt-1">Member Login</div>
         </div>
 

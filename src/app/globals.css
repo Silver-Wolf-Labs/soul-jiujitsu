@@ -1,3 +1,13 @@
+/* Member-portal dark theme — scoped to [data-portal-theme="dark"] so it can't
+   reach the admin console, the kiosk, or the public site.
+
+   MUST stay above the @tailwind directives: CSS requires @import to precede all
+   other rules, and postcss-import silently DROPS a later one — the whole dark
+   palette vanished with no warning when this sat at the bottom. Ordering isn't a
+   problem for the overrides, because they win on selector specificity
+   ([data-portal-theme="dark"] over :root), not on source order. */
+@import "./portal/portal-dark.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

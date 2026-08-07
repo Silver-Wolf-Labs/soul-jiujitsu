@@ -27,7 +27,7 @@ function EarnedTile({ item }: { item: EarnedBadge }) {
       >
         <Icon className="w-7 h-7" aria-hidden="true" />
       </div>
-      <div className="text-xs font-semibold text-black leading-tight">{item.badge.name}</div>
+      <div className="text-xs font-semibold text-black dark:text-ink leading-tight">{item.badge.name}</div>
       <div className="text-[11px] text-muted leading-tight">{item.badge.description}</div>
       {/* The profe's note on a manual award — the part members screenshot. */}
       {item.note && (
@@ -46,7 +46,7 @@ function LockedTile({ badge }: { badge: Badge }) {
     <div className="flex flex-col items-center text-center gap-1.5 opacity-45">
       <div className="relative w-14 h-14 rounded-full flex items-center justify-center border border-line bg-paper text-muted">
         <Icon className="w-7 h-7" aria-hidden="true" />
-        <span className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-white border border-line flex items-center justify-center">
+        <span className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-white dark:bg-portal-card border border-line flex items-center justify-center">
           <Lock className="w-2.5 h-2.5 text-muted" aria-hidden="true" />
         </span>
       </div>
@@ -74,9 +74,9 @@ export default function BadgeGrid({
   if (byCategory.length === 0) return null;
 
   return (
-    <div className="bg-white border border-line rounded-lg p-5">
+    <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5">
       <div className="flex items-baseline justify-between mb-4">
-        <h2 className="font-display text-xl text-black">Achievements</h2>
+        <h2 className="font-display text-xl text-black dark:text-ink">Achievements</h2>
         <span className="text-sm text-muted">
           {earned.length} of {earned.length + locked.length}
         </span>
