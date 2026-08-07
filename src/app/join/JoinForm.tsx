@@ -8,6 +8,7 @@ import ReactMarkdown from "react-markdown";
 import { createClient } from "@/lib/supabase/client";
 import { useGymProfile } from "@/lib/gym-profile-context";
 import { createMemberProfile } from "@/lib/actions/auth";
+import { checkEmailDeliverability } from "@/lib/actions/email-deliverability";
 import Spinner, { SpinnerButton } from "@/components/ui/Spinner";
 import { BeltColor } from "@/lib/constants";
 import BeltEditor, { type BeltEditorValue } from "@/components/ui/BeltEditor";
@@ -190,6 +191,17 @@ export default function JoinForm({ waiverTemplate }: Props) {
   const [existingUserId, setExistingUserId] = useState<string | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
 
+  // Typo correction offered by the email gate ("did you mean gmail.com?").
+  // `emailSuggestion` drives the prompt; `emailKeptAsTyped` records the address
+  // the member explicitly confirmed after being asked, so we prompt once and
+  // then respect their answer instead of blocking the same click forever.
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
+  const [emailKeptAsTyped, setEmailKeptAsTyped] = useState<string | null>(null);
+
+  // True while step 1's async checks (HIBP password + email deliverability)
+  // are in flight, so the Next button can show progress instead of looking dead.
+  const [checkingStep1, setCheckingStep1] = useState(false);
+
   const [form, setForm] = useState({
     first_name: "",
     last_name: "",
@@ -254,11 +266,15 @@ export default function JoinForm({ waiverTemplate }: Props) {
       setError("Completa todos los campos requeridos.");
       return;
     }
-    // Password rules apply only when we're about to create an account. A member
-    // completing a half-finished signup already has one, and the fields aren't
-    // rendered on that path — validating them would block the form on inputs
-    // that don't exist.
+
+    // Everything below applies only when we're about to create an account. A
+    // member completing a half-finished signup already has a password (those
+    // fields aren't rendered on that path) and an address that has already
+    // received mail, so re-validating either would block the form on inputs
+    // that don't exist or refuse a live account.
     if (!existingUserId) {
+      // Local, synchronous checks first — no point spending a DNS lookup or an
+      // HIBP round trip on a form that already fails offline.
       if (!form.password) { setError("Escribe una contraseña."); return; }
       if (form.password !== form.confirm_password) { setError("Las contraseñas no coinciden."); return; }
       if (form.password.length < 10) {
@@ -266,18 +282,53 @@ export default function JoinForm({ waiverTemplate }: Props) {
         return;
       }
 
-      // HIBP breach check. Fails open on HIBP network error so an outage
-      // of their service doesn't block signups. See src/lib/auth/hibp.ts.
+      setCheckingStep1(true);
       try {
-        const { validatePassword } = await import("@/lib/actions/password-validation");
-        const check = await validatePassword(form.password);
-        if (!check.ok) {
-          setError(check.message);
+        // Email deliverability gate. This must run before signUp(): Supabase
+        // mails whatever address it is given, and `type="email"` only checks
+        // for an "@" — so a typo'd or reserved domain becomes a hard bounce.
+        // Enough of those and the provider throttles sending for the whole
+        // project, which is what prompted this gate.
+        const gate = await checkEmailDeliverability(form.email);
+
+        if (!gate.ok) {
+          setError(gate.message);
+          setEmailSuggestion(null);
           return;
         }
-      } catch {
-        // If the validation server action itself fails, fall back to just
-        // the length check above. Don't block the user on infrastructure.
+
+        // A near-miss on a common provider stops the flow ONCE and offers the
+        // correction. Blocking outright would refuse valid-but-unusual
+        // domains; proceeding silently would mail an address the member cannot
+        // read. Once they confirm the address as typed, `emailKeptAsTyped`
+        // matches and the next click goes through — the member has final say.
+        if (gate.suggestion && gate.email !== emailKeptAsTyped) {
+          setEmailSuggestion(gate.suggestion);
+          return;
+        }
+
+        // Persist the normalized (trimmed, lowercased) address so the auth
+        // user and the member row agree on casing.
+        setForm((prev) => ({ ...prev, email: gate.email }));
+        setEmailSuggestion(null);
+
+        // HIBP breach check. Fails open on HIBP network error so an outage
+        // of their service doesn't block signups. See src/lib/auth/hibp.ts.
+        try {
+          const { validatePassword } = await import("@/lib/actions/password-validation");
+          const check = await validatePassword(form.password);
+          if (!check.ok) {
+            setError(check.message);
+            return;
+          }
+        } catch {
+          // If the validation server action itself fails, fall back to just
+          // the length check above. Don't block the user on infrastructure.
+        }
+      } finally {
+        // Runs on every exit path, including the early returns above — leaving
+        // this true would strand the member on a permanently disabled button.
+        setCheckingStep1(false);
       }
     }
 
@@ -517,13 +568,52 @@ export default function JoinForm({ waiverTemplate }: Props) {
                     value={form.email}
                     onChange={handleChange}
                     readOnly={!!existingUserId}
-                    aria-describedby={existingUserId ? "email-locked-hint" : undefined}
+                    aria-describedby={
+                      existingUserId
+                        ? "email-locked-hint"
+                        : emailSuggestion
+                          ? "email-suggestion"
+                          : undefined
+                    }
                     className={existingUserId ? `${inputClass} bg-off-white text-muted cursor-not-allowed` : inputClass}
                     autoComplete="email"
                   />
                   {existingUserId && (
                     <p id="email-locked-hint" className="text-[10px] text-muted mt-1">
                       Es el correo de tu cuenta.
+                    </p>
+                  )}
+                  {/* Typo prompt from the deliverability gate. `role="alert"` so a
+                      screen reader announces it — the member is mid-flow and the
+                      Next button appears to have done nothing without it. */}
+                  {emailSuggestion && !existingUserId && (
+                    <p id="email-suggestion" role="alert" className="text-xs text-ink mt-1.5">
+                      ¿Quisiste decir{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForm((prev) => ({ ...prev, email: emailSuggestion }));
+                          setEmailSuggestion(null);
+                          setError("");
+                        }}
+                        className="font-semibold underline text-black hover:text-near-black"
+                      >
+                        {emailSuggestion}
+                      </button>
+                      ?{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Record the address as confirmed so the gate stops
+                          // asking, then let them press Next again.
+                          setEmailKeptAsTyped(form.email.trim().toLowerCase());
+                          setEmailSuggestion(null);
+                          setError("");
+                        }}
+                        className="text-muted underline hover:text-ink"
+                      >
+                        No, usar el que escribí
+                      </button>
                     </p>
                   )}
                 </div>
@@ -686,11 +776,18 @@ export default function JoinForm({ waiverTemplate }: Props) {
                     form.confirm_password.length === 0 ||
                     form.password !== form.confirm_password
                   )) ||
-                  !termsAccepted
+                  !termsAccepted ||
+                  // Step 1 now makes two network round trips (the HIBP password
+                  // check and the email deliverability gate). Without this the
+                  // button looks inert for up to a few seconds and invites a
+                  // second click, which would fire both checks again.
+                  checkingStep1
                 }
                 className={btnClass}
               >
-                Siguiente
+                {checkingStep1
+                  ? <SpinnerButton label="Verificando…" />
+                  : "Siguiente"}
               </button>
             </form>
           )}

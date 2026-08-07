@@ -23,9 +23,11 @@
  *      only, no auth, no member.
  *
  * Identity:
- *   • Canonical emails use the `@souljj.team` domain so they're
+ *   • Canonical emails use the `@souljj.invalid` domain so they're
  *     clearly separable from the synthetic `@souljj.test` fixture users.
- *     The `unseed` path never touches these.
+ *     Both TLDs are RFC-reserved and unresolvable, so no mail can ever be
+ *     attempted against a bootstrapped account. The `unseed` path never
+ *     touches these.
  *   • Password: `Testpass123!` (hardcoded; documented below). Safe for a
  *     test env, replace before prod.
  *
@@ -48,7 +50,13 @@ if (!SUPABASE_URL || !SERVICE_KEY) {
 const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
 const CANONICAL_PASSWORD = "Testpass123!";
-const CANONICAL_EMAIL_DOMAIN = "souljj.team";
+// `.invalid` is reserved by RFC 2606 §2 — it can never be registered or
+// resolve, so nothing can ever try to deliver to it. The previous value,
+// `souljj.team`, was a real registrable TLD with no MX record: it looked
+// like a live address, so a password reset or admin re-invite aimed at one
+// of these accounts produced a hard bounce against the project's sending
+// reputation. Any replacement must stay under a reserved TLD.
+const CANONICAL_EMAIL_DOMAIN = "souljj.invalid";
 
 // ─── Roster ─────────────────────────────────────────────────────────────────
 

@@ -14,22 +14,47 @@ export default function SubscribeForm({ sectionConfig }: Props) {
   const [honeypot, setHoneypot] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  // Typo correction from the deliverability gate. Held here rather than
+  // auto-applied: this is a one-shot form, so a wrong "correction" would
+  // silently subscribe someone else's address with no chance to undo.
+  const [suggestion, setSuggestion] = useState<string | null>(null);
 
   const title = sectionConfig?.display_title ?? "Mantente al tanto";
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  /**
+   * `resolved` is true when the subscriber has already answered a suggestion
+   * prompt, which tells the action to accept the address as given.
+   */
+  async function submit(address: string, resolved: boolean) {
     setStatus("loading");
     setErrorMsg("");
 
-    const result = await addSubscriber(value, mode, honeypot);
+    const result = await addSubscriber(address, mode, honeypot, resolved);
+
     if (result.success) {
+      setSuggestion(null);
       setStatus("success");
       setValue("");
-    } else {
-      setStatus("error");
-      setErrorMsg(result.error ?? "Algo salió mal. Intenta de nuevo.");
+      return;
     }
+
+    // A suggestion with no error message means "confirm this first", not
+    // "something went wrong" — so return to idle and let the prompt render.
+    if (result.suggestion) {
+      setSuggestion(result.suggestion);
+      setStatus("idle");
+      return;
+    }
+
+    setStatus("error");
+    setErrorMsg(result.error ?? "Algo salió mal. Intenta de nuevo.");
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    // A submit while a prompt is showing means the subscriber left the address
+    // as typed and pressed the button again — treat that as confirmation.
+    await submit(value, suggestion !== null);
   }
 
   return (
@@ -48,7 +73,7 @@ export default function SubscribeForm({ sectionConfig }: Props) {
           {(["email", "sms"] as const).map((m) => (
             <button
               key={m}
-              onClick={() => { setMode(m); setValue(""); setStatus("idle"); }}
+              onClick={() => { setMode(m); setValue(""); setStatus("idle"); setSuggestion(null); }}
               className={`px-6 py-2.5 text-[13px] font-semibold transition-all duration-150 border-r border-white/10 last:border-r-0 cursor-pointer font-body ${
                 mode === m ? "bg-yellow text-black" : "bg-transparent text-white/50 hover:text-white"
               }`}
@@ -102,6 +127,31 @@ export default function SubscribeForm({ sectionConfig }: Props) {
 
         {status === "error" && (
           <p className="text-sm text-danger mt-2">{errorMsg}</p>
+        )}
+
+        {/* Typo prompt. Accepting subscribes the corrected address immediately —
+            one click, since the subscriber has already stated their intent by
+            submitting. Declining leaves the field untouched so the next press of
+            "Suscribirme" goes through as typed. */}
+        {suggestion && status !== "success" && (
+          <p role="alert" className="text-sm text-white/70 mt-3">
+            ¿Quisiste decir{" "}
+            <button
+              type="button"
+              onClick={() => { setValue(suggestion); submit(suggestion, true); }}
+              className="font-semibold text-yellow underline hover:text-yellow-deep"
+            >
+              {suggestion}
+            </button>
+            ?{" "}
+            <button
+              type="button"
+              onClick={() => submit(value, true)}
+              className="text-white/40 underline hover:text-white/70"
+            >
+              No, usar el que escribí
+            </button>
+          </p>
         )}
 
         <p className="text-xs text-white/30 mt-4">

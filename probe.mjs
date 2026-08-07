@@ -1,0 +1,14 @@
+import { chromium } from "@playwright/test";
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 1280, height: 1000 } });
+p.on("console", m => console.log(`[${m.type()}]`, m.text().slice(0,200)));
+p.on("pageerror", e => console.log("[pageerror]", e.message.slice(0,300)));
+await p.goto("http://localhost:3210/join", { waitUntil: "networkidle" });
+await p.waitForTimeout(3000);
+console.log("URL:", p.url());
+console.log("forms:", await p.locator("form").count());
+console.log("inputs:", await p.locator("input").count());
+console.log("\n--- visible text ---");
+console.log((await p.locator("body").innerText()).slice(0, 1200));
+await p.screenshot({ path: "/tmp/join-shots/probe.png", fullPage: true });
+await b.close();
