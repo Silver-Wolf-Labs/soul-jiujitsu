@@ -2,16 +2,40 @@
 
 import type { BeltHistory } from "@/lib/supabase/types";
 import { BeltColor, BELT_DOT_CLASS, BELT_TEXT_CLASS, STRIPE_MAX } from "@/lib/constants";
-import { labelForEvent } from "@/lib/belt-events";
+import { labelForEvent, type BeltEventType } from "@/lib/belt-events";
 import { useIsMobile } from "@/lib/hooks/use-is-mobile";
 import { usePagination } from "@/lib/hooks/use-pagination";
 import Pager from "@/components/ui/Pager";
 
+// ── Copy ──────────────────────────────────────────────────────────────────────
+//
+// Injected, not looked up: this list also renders inside the English admin
+// member-detail page. Same reasoning as CheckInsList — see the Copy block there.
+// The defaults reproduce what the admin page shows today.
+
+export interface BeltHistoryListLabels {
+  empty: string;
+  /** e.g. `belt => "cinturón azul"`. Spanish puts the colour after the noun. */
+  beltLabel: (belt: string) => string;
+  /** Localised event-type badge. Narrow union, so a new event type in the DB
+   *  fails typecheck at every caller rather than rendering a raw enum value. */
+  eventLabel: (eventType: BeltEventType) => string;
+  /** "by Tristan" / "por Tristan". */
+  promotedBy: (name: string) => string;
+}
+
+const DEFAULT_LABELS: BeltHistoryListLabels = {
+  empty: "No belt history yet.",
+  beltLabel: (belt) => `${belt} belt`,
+  eventLabel: labelForEvent,
+  promotedBy: (name) => `by ${name}`,
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatDate(iso: string, tz?: string): string {
+function formatDate(iso: string, locale: string, tz?: string): string {
   try {
-    return new Date(iso).toLocaleDateString("en-US", {
+    return new Date(iso).toLocaleDateString(locale, {
       month: "short",
       day: "numeric",
       year: "numeric",
@@ -53,8 +77,13 @@ export interface BeltHistoryListProps {
    * Falls back to the viewer's browser timezone when omitted.
    */
   timezone?: string;
-  /** Shown when the list is empty. */
-  emptyText?: string;
+  /** Overrides for the rendered strings, merged over the English defaults. */
+  labels?: Partial<BeltHistoryListLabels>;
+  /**
+   * BCP 47 tag for the promotion dates. Defaults to "en-US" — what this file
+   * hard-coded before — so the admin page renders unchanged.
+   */
+  locale?: string;
   className?: string;
 }
 
@@ -69,9 +98,11 @@ export default function BeltHistoryList({
   pageSize = 5,
   mobilePageSize = 3,
   timezone,
-  emptyText = "No belt history yet.",
+  labels: labelOverrides,
+  locale = "en-US",
   className = "",
 }: BeltHistoryListProps) {
+  const labels = { ...DEFAULT_LABELS, ...labelOverrides };
   const isMobile = useIsMobile();
   const effectivePageSize = isMobile ? mobilePageSize : pageSize;
   const { visible, page, setPage, totalPages } = usePagination(entries, effectivePageSize);
@@ -79,7 +110,7 @@ export default function BeltHistoryList({
   if (entries.length === 0) {
     return (
       <div className={`text-sm text-muted py-6 text-center ${className}`}>
-        {emptyText}
+        {labels.empty}
       </div>
     );
   }
@@ -110,25 +141,27 @@ export default function BeltHistoryList({
               <div className="flex-1 pb-3 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <span className={`text-sm font-semibold capitalize ${labelClass}`}>
-                      {entry.belt} belt
+                    {/* first-letter, not capitalize: "cinturón azul" is two words
+                        and only the first should be upper-cased. */}
+                    <span className={`text-sm font-semibold first-letter:uppercase ${labelClass}`}>
+                      {labels.beltLabel(entry.belt)}
                     </span>
                     {entry.stripes > 0 && (
                       <StripePips count={entry.stripes} belt={entry.belt} />
                     )}
                   </div>
                   <span className="text-[11px] text-muted font-mono whitespace-nowrap flex-shrink-0 mt-0.5">
-                    {formatDate(entry.promoted_at, timezone)}
+                    {formatDate(entry.promoted_at, locale, timezone)}
                   </span>
                 </div>
 
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <span className="text-[10px] font-mono tracking-wide text-muted uppercase bg-off-white px-1.5 py-0.5 rounded">
-                    {labelForEvent(entry.event_type)}
+                    {labels.eventLabel(entry.event_type)}
                   </span>
                   {entry.promoted_by_name && (
                     <span className="text-[11px] text-muted truncate">
-                      by {entry.promoted_by_name}
+                      {labels.promotedBy(entry.promoted_by_name)}
                     </span>
                   )}
                 </div>

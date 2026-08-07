@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
 import { useGymProfile } from "@/lib/gym-profile-context";
 import PortalSignOutButton from "./PortalSignOutButton";
@@ -10,6 +11,7 @@ import PortalSignOutButton from "./PortalSignOutButton";
 export default function PortalNav() {
   const pathname = usePathname();
   const profile = useGymProfile();
+  const t = useTranslations("portal.nav");
   const [memberName, setMemberName] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [checked, setChecked] = useState(false);
@@ -62,7 +64,7 @@ export default function PortalNav() {
             href="/portal"
             className="text-sm text-muted hover:text-ink transition-colors"
           >
-            Profile
+            {t("profile")}
           </Link>
           {/* Opens the public site in a new tab rather than navigating away.
               Leaving the portal in the same tab is a one-way door: the public
@@ -75,7 +77,7 @@ export default function PortalNav() {
             rel="noopener"
             className="text-sm text-muted hover:text-ink transition-colors hidden sm:block"
           >
-            Ver el sitio &nearr;
+            {t("viewSite")} &nearr;
           </Link>
         </div>
 

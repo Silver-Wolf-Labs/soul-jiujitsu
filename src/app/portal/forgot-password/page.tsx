@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
 import { checkEmailDeliverability } from "@/lib/actions/email-deliverability";
 import { useGymProfile } from "@/lib/gym-profile-context";
@@ -9,6 +10,7 @@ import Link from "next/link";
 
 export default function ForgotPasswordPage() {
   const profile = useGymProfile();
+  const t = useTranslations("portal.forgotPassword");
   const [email, setEmail]     = useState("");
   const [status, setStatus]   = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
@@ -64,7 +66,7 @@ export default function ForgotPasswordPage() {
 
         <div className="text-center mb-6">
           <div className="font-display text-2xl text-black dark:text-ink tracking-tight">{profile.logoText} &bull; {profile.cityName.toUpperCase()}</div>
-          <div className="text-sm text-muted mt-1">Reset Password</div>
+          <div className="text-sm text-muted mt-1">{t("subtitle")}</div>
         </div>
 
         {status === "sent" ? (
@@ -75,21 +77,22 @@ export default function ForgotPasswordPage() {
               </svg>
             </div>
             <p className="text-sm text-ink">
-              Check your email. We sent a reset link to <strong>{email}</strong>.
+              {t.rich("sentTitle", {
+                email,
+                strong: (chunks) => <strong>{chunks}</strong>,
+              })}
             </p>
-            <p className="text-xs text-muted">The link expires in 1 hour.</p>
+            <p className="text-xs text-muted">{t("sentExpiry")}</p>
             <Link href="/portal/login" className="block text-sm text-black dark:text-ink underline underline-offset-2 hover:opacity-70 mt-4">
-              Back to sign in
+              {t("backToSignIn")}
             </Link>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <p className="text-sm text-muted">
-              Enter your email and we&apos;ll send you a link to reset your password.
-            </p>
+            <p className="text-sm text-muted">{t("intro")}</p>
 
             <div>
-              <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">Email</label>
+              <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">{t("email")}</label>
               <input
                 type="email"
                 value={email}
@@ -110,12 +113,12 @@ export default function ForgotPasswordPage() {
               disabled={status === "sending"}
               className="w-full py-2.5 bg-black text-white dark:bg-yellow dark:text-black rounded font-semibold text-sm hover:bg-near-black dark:hover:bg-yellow-deep disabled:opacity-50 transition-colors"
             >
-              {status === "sending" ? <SpinnerButton label="Sending" /> : "Send Reset Link"}
+              {status === "sending" ? <SpinnerButton label={t("submitting")} /> : t("submit")}
             </button>
 
             <p className="text-center text-sm text-muted">
               <Link href="/portal/login" className="text-black dark:text-ink underline underline-offset-2 hover:opacity-70">
-                Back to sign in
+                {t("backToSignIn")}
               </Link>
             </p>
           </form>

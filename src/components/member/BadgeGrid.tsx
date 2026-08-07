@@ -1,5 +1,6 @@
 import { Lock } from "lucide-react";
-import { badgeIcon, TIER_STYLES, CATEGORY_LABELS, CATEGORY_ORDER } from "@/lib/badges";
+import { useTranslations } from "next-intl";
+import { badgeIcon, TIER_STYLES, CATEGORY_ORDER } from "@/lib/badges";
 import type { Badge, EarnedBadge, BadgeCategory } from "@/lib/supabase/types";
 
 /**
@@ -10,9 +11,10 @@ import type { Badge, EarnedBadge, BadgeCategory } from "@/lib/supabase/types";
  * remove the reason to chase them. Secret badges are filtered out upstream in
  * getOwnBadges so a surprise stays a surprise.
  *
- * Note the badge names and descriptions come from the database in Spanish (the
- * language members read), while the surrounding portal chrome is English. That
- * mixture is deliberate here rather than accidental.
+ * Badge names, descriptions and the profe's award notes come from the database and
+ * render exactly as they were written — the gym authored them. The chrome around
+ * them (the heading, the counter, the category headings) is the system talking, so
+ * it comes from the catalogue.
  */
 
 function EarnedTile({ item }: { item: EarnedBadge }) {
@@ -63,6 +65,11 @@ export default function BadgeGrid({
   earned: EarnedBadge[];
   locked: Badge[];
 }) {
+  const t = useTranslations("portal.badges");
+  // The five categories are a code-side enum, not something the profe types, so
+  // their labels belong in the catalogue. CATEGORY_LABELS in @/lib/badges stays
+  // put — the admin console still reads it, and it is on a later i18n phase.
+  const tCategory = useTranslations("portal.badges.categories");
   // Group both sets by category so a member sees "Hitos: 3 of 7" rather than one
   // undifferentiated wall of 31 tiles.
   const byCategory = CATEGORY_ORDER.map((category: BadgeCategory) => ({
@@ -76,9 +83,9 @@ export default function BadgeGrid({
   return (
     <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5">
       <div className="flex items-baseline justify-between mb-4">
-        <h2 className="font-display text-xl text-black dark:text-ink">Achievements</h2>
+        <h2 className="font-display text-xl text-black dark:text-ink">{t("heading")}</h2>
         <span className="text-sm text-muted">
-          {earned.length} of {earned.length + locked.length}
+          {t("earnedOfTotal", { earned: earned.length, total: earned.length + locked.length })}
         </span>
       </div>
 
@@ -86,7 +93,7 @@ export default function BadgeGrid({
         {byCategory.map((group) => (
           <div key={group.category}>
             <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">
-              {CATEGORY_LABELS[group.category]}
+              {tCategory(group.category)}
               <span className="ml-2 font-normal normal-case tracking-normal">
                 {group.earned.length}/{group.earned.length + group.locked.length}
               </span>

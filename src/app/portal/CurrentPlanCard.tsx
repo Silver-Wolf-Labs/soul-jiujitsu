@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
 import { selfEnrollInPlan } from "@/lib/actions/portal";
 import { requestCancellation } from "@/lib/actions/billing";
@@ -27,11 +28,23 @@ const MEMBERSHIP_STATUS_COLORS: Record<MembershipStatus, string> = {
   past_due: "bg-danger-light text-danger",
 };
 
-function formatPeriod(plan: MembershipPlan): string {
+/**
+ * The price suffix under a plan's number.
+ *
+ * `period_display` wins when set: it is a free-text column the admin fills in when
+ * a plan needs wording the three fixed intervals can't express ("por trimestre"),
+ * so it is the profe's copy and renders verbatim. Only the fallbacks are the
+ * system talking, and they come from the catalogue — hence the `t` parameter,
+ * since this is a plain function and can't call the hook.
+ */
+function formatPeriod(
+  plan: MembershipPlan,
+  t: (key: string) => string
+): string {
   if (plan.period_display) return plan.period_display;
-  if (plan.billing_interval === "month") return "/month";
-  if (plan.billing_interval === "year")  return "/year";
-  return "one time";
+  if (plan.billing_interval === "month") return t("perMonth");
+  if (plan.billing_interval === "year")  return t("perYear");
+  return t("oneTime");
 }
 
 // ── CurrentPlanCard ────────────────────────────────────────────────────────
@@ -46,6 +59,9 @@ export default function CurrentPlanCard({
   effectivePrice: number | null;
 }) {
   const router = useRouter();
+  const t = useTranslations("portal.plan");
+  const tInterval = useTranslations("portal.billingInterval");
+  const tStatus = useTranslations("portal.membershipStatus");
   const [showModal, setShowModal] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [cancelResult, setCancelResult] = useState<{ cancelAt: string; chargedAgain: boolean } | null>(null);
@@ -72,43 +88,51 @@ export default function CurrentPlanCard({
   return (
     <>
       <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5">
-        <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Current Plan</div>
+        <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">{t("heading")}</div>
         {plan && activeMembership ? (
           <>
+            {/* Plan name as the admin wrote it. */}
             <div className="font-display text-lg text-black dark:text-ink">{plan.name}</div>
             <div className="text-sm text-muted mt-1">
-              {effectivePrice !== null ? formatCents(effectivePrice) : "—"} / {plan.billing_interval}
+              {/* The interval was the raw enum ("month") beside a Spanish price.
+                  Both halves go through the message now. */}
+              {t("perInterval", {
+                price: effectivePrice !== null ? formatCents(effectivePrice) : "—",
+                interval: tInterval(plan.billing_interval),
+              })}
             </div>
             <div className="mt-2">
-              <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold capitalize ${MEMBERSHIP_STATUS_COLORS[activeMembership.status]}`}>
-                {activeMembership.status}
+              {/* `capitalize` gone with the raw enum — see the same badge in the
+                  profile page's billing tab. */}
+              <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${MEMBERSHIP_STATUS_COLORS[activeMembership.status]}`}>
+                {tStatus(activeMembership.status)}
               </span>
             </div>
 
             {/* Cancellation UI */}
             {cancelResult ? (
               <div className="mt-3 text-xs text-muted bg-off-white border border-line rounded px-3 py-2">
-                Membership cancels on{" "}
-                <span className="font-semibold text-ink">
-                  {formatDate(cancelResult.cancelAt)}
-                </span>
+                {/* t.rich, not a bare interpolation: the date keeps its bold span,
+                    and in Spanish it sits mid-sentence rather than at the end. */}
+                {t.rich("cancelScheduled", {
+                  date: formatDate(cancelResult.cancelAt),
+                  b: (chunks) => <span className="font-semibold text-ink">{chunks}</span>,
+                })}
                 {cancelResult.chargedAgain && (
-                  <span className="block mt-1 text-yellow-dark">You will be charged one more billing cycle.</span>
+                  <span className="block mt-1 text-yellow-dark">{t("chargedOnceMore")}</span>
                 )}
               </div>
             ) : hasPendingCancel ? (
               <div className="mt-3 text-xs text-muted">
-                Cancels on{" "}
-                <span className="font-semibold text-ink">
-                  {formatDate(activeMembership.ends_at!)}
-                </span>
+                {t.rich("cancelsOn", {
+                  date: formatDate(activeMembership.ends_at!),
+                  b: (chunks) => <span className="font-semibold text-ink">{chunks}</span>,
+                })}
               </div>
             ) : showCancelConfirm ? (
               <div className="mt-3 space-y-2">
                 <p className="text-xs text-muted">
-                  {isComp
-                    ? "This will cancel your complimentary membership immediately."
-                    : "Cancellation requires 10 days notice before your next billing date. You may be charged one more billing cycle."}
+                  {isComp ? t("confirmCompCopy") : t("confirmPaidCopy")}
                 </p>
                 {cancelError && (
                   <p className="text-xs text-danger">{cancelError}</p>
@@ -122,13 +146,13 @@ export default function CurrentPlanCard({
                     // Black on that same tint is 11:1.
                     className="px-3 py-1 bg-danger text-white dark:text-black text-xs font-semibold rounded hover:brightness-90 transition-all disabled:opacity-50"
                   >
-                    {isCanceling ? <SpinnerButton label="Canceling" /> : "Confirm Cancel"}
+                    {isCanceling ? <SpinnerButton label={t("canceling")} /> : t("confirmCancel")}
                   </button>
                   <button
                     onClick={() => setShowCancelConfirm(false)}
                     className="text-xs text-muted hover:text-ink transition-colors"
                   >
-                    Never mind
+                    {t("neverMind")}
                   </button>
                 </div>
               </div>
@@ -137,18 +161,18 @@ export default function CurrentPlanCard({
                 onClick={() => setShowCancelConfirm(true)}
                 className="mt-3 text-xs text-muted hover:text-danger transition-colors underline underline-offset-2"
               >
-                Cancel Membership
+                {t("cancelMembership")}
               </button>
             )}
           </>
         ) : (
           <div className="space-y-3">
-            <div className="text-sm text-muted">No active membership</div>
+            <div className="text-sm text-muted">{t("noneActive")}</div>
             <button
               onClick={() => setShowModal(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-yellow text-black text-xs font-bold uppercase tracking-wider rounded hover:brightness-95 transition-all"
             >
-              Select a Plan
+              {t("selectPlan")}
             </button>
           </div>
         )}
@@ -165,6 +189,7 @@ export default function CurrentPlanCard({
 
 function PlanSelectionModal({ onClose }: { onClose: () => void }) {
   const router = useRouter();
+  const t = useTranslations("portal.plan");
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [enrollingId, setEnrollingId] = useState<number | null>(null);
@@ -228,12 +253,12 @@ function PlanSelectionModal({ onClose }: { onClose: () => void }) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-line flex-shrink-0">
           <div>
-            <div className="font-display text-xl text-black dark:text-ink tracking-tight">Choose a Membership Plan</div>
-            <div className="text-xs text-muted mt-0.5">Month-to-month · No contracts · Cancel with 10 days notice</div>
+            <div className="font-display text-xl text-black dark:text-ink tracking-tight">{t("modalTitle")}</div>
+            <div className="text-xs text-muted mt-0.5">{t("modalSubtitle")}</div>
           </div>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("close")}
             className="w-8 h-8 flex items-center justify-center text-muted hover:text-ink rounded-full hover:bg-off-white transition-colors flex-shrink-0"
           >
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-4 h-4">
@@ -245,9 +270,9 @@ function PlanSelectionModal({ onClose }: { onClose: () => void }) {
         {/* Plans grid — scrollable */}
         <div className="flex-1 overflow-y-auto p-5 md:p-8">
           {loading ? (
-            <div className="flex justify-center py-12"><Spinner label="Loading plans" /></div>
+            <div className="flex justify-center py-12"><Spinner label={t("loadingPlans")} /></div>
           ) : plans.length === 0 ? (
-            <p className="text-sm text-muted text-center py-12">No plans available. Please contact the gym.</p>
+            <p className="text-sm text-muted text-center py-12">{t("noPlans")}</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {plans.map(plan => (
@@ -262,6 +287,8 @@ function PlanSelectionModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
+          {/* Already Spanish — selfEnrollInPlan resolves its own copy from
+              portal.errors. */}
           {error && (
             <p className="mt-5 text-sm text-danger bg-danger-light border border-danger-border rounded-lg px-4 py-2.5 text-center">
               {error}
@@ -286,6 +313,7 @@ function PlanCard({
   disabled: boolean;
   onEnroll: () => void;
 }) {
+  const t = useTranslations("portal.plan");
   const color = plan.highlight_color ?? null;
   const borderStyle = color
     ? { border: `2px solid ${HIGHLIGHT_BORDER_HEX[color]}` }
@@ -303,10 +331,13 @@ function PlanCard({
     >
       {showBadge && (
         <div className={`absolute -top-[13px] left-1/2 -translate-x-1/2 text-[10px] font-bold tracking-[0.1em] uppercase px-3.5 py-1 rounded-full whitespace-nowrap ${badgeBgClass} ${badgeTextClass}`}>
-          {plan.highlight_label || "Featured"}
+          {/* highlight_label is the admin's ribbon text ("Más popular"); only the
+              fallback for a highlighted plan with no label set is ours. */}
+          {plan.highlight_label || t("featured")}
         </div>
       )}
 
+      {/* Plan name and features: all admin-authored, rendered as stored. */}
       <div className="text-[11px] font-bold tracking-[0.12em] uppercase text-muted mb-4">
         {plan.name}
       </div>
@@ -314,7 +345,7 @@ function PlanCard({
         <sup className="text-xl align-top mt-2">$</sup>
         {Math.floor(plan.price_cents / 100)}
       </div>
-      <div className="text-[13px] text-muted mb-5">{formatPeriod(plan)}</div>
+      <div className="text-[13px] text-muted mb-5">{formatPeriod(plan, t)}</div>
 
       <ul className="flex-1 mb-6 space-y-0">
         {plan.features.map(f => (
@@ -336,7 +367,7 @@ function PlanCard({
             : "bg-white dark:bg-portal-card text-ink border-line hover:border-black hover:bg-black hover:text-white dark:hover:border-yellow dark:hover:bg-yellow dark:hover:text-black disabled:opacity-40"
         } disabled:cursor-not-allowed`}
       >
-        {enrolling ? <SpinnerButton label="Enrolling" /> : "Enroll Now"}
+        {enrolling ? <SpinnerButton label={t("enrolling")} /> : t("enroll")}
       </button>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Flame, CalendarCheck } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
 import { badgeIcon } from "@/lib/badges";
 import BeltVisual from "@/components/ui/BeltVisual";
@@ -64,6 +65,7 @@ export default function TeamFeed({
   initialLeaderboard: TeamMemberEntry[];
   initialActivity: TeamActivityEntry[];
 }) {
+  const t = useTranslations("portal.teamFeed");
   const [leaderboard, setLeaderboard] = useState(initialLeaderboard);
   const [activity, setActivity] = useState(initialActivity);
   const [tab, setTab] = useState<"ranking" | "activity">("ranking");
@@ -125,25 +127,28 @@ export default function TeamFeed({
   return (
     <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5">
       <div className="flex items-baseline justify-between mb-4">
-        <h2 className="font-display text-xl text-black dark:text-ink">The Team</h2>
+        <h2 className="font-display text-xl text-black dark:text-ink">{t("heading")}</h2>
         <span className="text-sm text-muted">
-          {leaderboard.length} {leaderboard.length === 1 ? "member" : "members"}
+          {t("memberCount", { count: leaderboard.length })}
         </span>
       </div>
 
       <div className="flex w-full rounded-lg bg-line/50 p-1 mb-4">
-        {(["ranking", "activity"] as const).map((t) => (
+        {/* `id`, where the callback parameter used to be `t` — that name is the
+            translator now, and shadowing it here would resolve the tab labels
+            against a string. */}
+        {(["ranking", "activity"] as const).map((id) => (
           <button
-            key={t}
+            key={id}
             type="button"
-            onClick={() => setTab(t)}
+            onClick={() => setTab(id)}
             className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-              tab === t
+              tab === id
                 ? "bg-white dark:bg-line text-ink shadow-sm"
                 : "text-ink/50 hover:text-ink"
             }`}
           >
-            {t === "ranking" ? "Ranking" : "Recent"}
+            {id === "ranking" ? t("tabRanking") : t("tabRecent")}
           </button>
         ))}
       </div>
@@ -158,8 +163,10 @@ export default function TeamFeed({
 }
 
 function Leaderboard({ rows }: { rows: TeamMemberEntry[] }) {
+  const t = useTranslations("portal.teamFeed");
+
   if (rows.length === 0) {
-    return <p className="text-sm text-muted">No teammates to show yet.</p>;
+    return <p className="text-sm text-muted">{t("noTeammates")}</p>;
   }
 
   return (
@@ -182,19 +189,20 @@ function Leaderboard({ rows }: { rows: TeamMemberEntry[] }) {
 
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-semibold text-ink truncate">
+              {/* The member's own display name — theirs, so it renders as stored. */}
               {m.display_name}
-              {m.is_self && <span className="ml-1.5 text-[11px] font-normal text-muted">(you)</span>}
+              {m.is_self && <span className="ml-1.5 text-[11px] font-normal text-muted">{t("you")}</span>}
             </span>
             <span className="block text-xs text-muted">
-              Level {m.level} · {m.xp_total.toLocaleString()} XP
-              {m.badges_earned > 0 && ` · ${m.badges_earned} ${m.badges_earned === 1 ? "badge" : "badges"}`}
+              {t("levelAndXp", { level: m.level, xp: m.xp_total })}
+              {m.badges_earned > 0 && ` · ${t("badgeCount", { count: m.badges_earned })}`}
             </span>
           </span>
 
           {m.streak_days > 0 && (
             <span
               className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-orange"
-              title={`Longest streak: ${m.longest_streak} days`}
+              title={t("longestStreak", { count: m.longest_streak })}
             >
               <Flame className="w-3.5 h-3.5" aria-hidden="true" />
               {m.streak_days}
@@ -207,6 +215,8 @@ function Leaderboard({ rows }: { rows: TeamMemberEntry[] }) {
 }
 
 function ActivityList({ rows }: { rows: TeamActivityEntry[] }) {
+  const t = useTranslations("portal.teamFeed");
+  const tTime = useTranslations("portal.relativeTime");
   // Null until after mount, which is what suppresses the relative timestamps on
   // the server pass: "5m ago" computed during SSR is already wrong by the time
   // the HTML arrives, and rendering a different string on hydration is a
@@ -220,7 +230,7 @@ function ActivityList({ rows }: { rows: TeamActivityEntry[] }) {
   }, []);
 
   if (rows.length === 0) {
-    return <p className="text-sm text-muted">Nothing yet — be the first to train today.</p>;
+    return <p className="text-sm text-muted">{t("noActivity")}</p>;
   }
 
   return (
@@ -241,16 +251,27 @@ function ActivityList({ rows }: { rows: TeamActivityEntry[] }) {
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-sm text-ink truncate">
-                <span className="font-semibold">
-                  {a.is_self ? "You" : a.display_name}
-                </span>{" "}
-                {a.kind === "badge" ? "earned" : a.is_self ? "checked into" : "trained"}{" "}
-                <span className="font-semibold">{a.title}</span>
+                {/* One whole sentence per case instead of three concatenated
+                    fragments. The old shape assumed subject-verb-object with the
+                    verb pickable in isolation; Spanish conjugates it for the
+                    person ("ganaste" vs "ganó"), so the person and the verb can't
+                    be chosen independently. `a.title` is the class or badge name —
+                    the gym's own text, so it passes through untranslated. */}
+                {t.rich(
+                  a.kind === "badge"
+                    ? a.is_self ? "youEarned" : "otherEarned"
+                    : a.is_self ? "youCheckedIn" : "otherTrained",
+                  {
+                    name: a.display_name,
+                    title: a.title,
+                    b: (chunks) => <span className="font-semibold">{chunks}</span>,
+                  }
+                )}
               </span>
               {/* &nbsp; holds the line's height before the first client tick so
                   the list doesn't reflow a pixel on hydration. */}
               <span className="block text-xs text-muted">
-                {now === null ? " " : relativeTime(a.occurred_at, now)}
+                {now === null ? " " : relativeTime(a.occurred_at, now, tTime)}
               </span>
             </span>
           </li>
@@ -261,20 +282,30 @@ function ActivityList({ rows }: { rows: TeamActivityEntry[] }) {
 }
 
 /**
- * "3h ago". Coarse on purpose — the feed is ambient, not a timestamp log.
+ * "hace 3 horas". Coarse on purpose — the feed is ambient, not a timestamp log.
  *
  * `now` is passed in rather than read from Date.now() inside, so the whole list
  * is stamped against one instant. Read per row it would also differ between the
  * server render and the hydrating client, which React reports as a hydration
  * mismatch for every row that happens to tick over between the two.
+ *
+ * `t` is passed in for the same reason `now` is: this is a plain function, not a
+ * component, so it can't call the hook itself. Intl.RelativeTimeFormat would be
+ * the obvious alternative and is deliberately not used — it produces "hace 90
+ * minutos" where this bucketing wants "hace 1 hora", and the thresholds, not the
+ * wording, are the point.
  */
-function relativeTime(iso: string, now: number): string {
+function relativeTime(
+  iso: string,
+  now: number,
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
   const then = new Date(iso).getTime();
   const mins = Math.floor((now - then) / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return t("justNow");
+  if (mins < 60) return t("minutes", { count: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t("hours", { count: hours });
   const days = Math.floor(hours / 24);
-  return days === 1 ? "yesterday" : `${days}d ago`;
+  return days === 1 ? t("yesterday") : t("days", { count: days });
 }

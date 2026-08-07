@@ -1,3 +1,9 @@
+import createNextIntlPlugin from "next-intl/plugin";
+
+// Resolves ./src/i18n/request.ts by convention — see that file for why the
+// locale is fixed rather than routed.
+const withNextIntl = createNextIntlPlugin();
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
@@ -68,4 +74,7 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+// The plugin wraps rather than replaces: it only adds the `next-intl/config`
+// alias and the message-file watcher, so the headers() block above (and with it
+// the CSP) is carried through untouched.
+export default withNextIntl(nextConfig);

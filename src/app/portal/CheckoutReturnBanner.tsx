@@ -2,12 +2,36 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 
-type Banner = { message: string; variant: "success" | "warning" };
+/**
+ * Which message to show, resolved from the URL. Deliberately a key rather than
+ * the rendered string: the effect below runs once (guarded by `handled`) and
+ * then strips the params, so storing translated copy in state would mean `t`
+ * had to be an effect dependency — and a re-run after the params are gone
+ * resolves to nothing and blanks the banner.
+ */
+type BannerKey =
+  | "enrolled"
+  | "purchased"
+  | "enrollCanceled"
+  | "purchaseCanceled"
+  | "postBilling"
+  | `billingError.${"noCustomer" | "staleCustomer" | "unavailable" | "lookupFailed" | "generic"}`;
+
+type Banner = { key: BannerKey; variant: "success" | "warning" };
+
+const BILLING_ERROR_KEYS: Record<string, BannerKey> = {
+  no_customer:    "billingError.noCustomer",
+  stale_customer: "billingError.staleCustomer",
+  unavailable:    "billingError.unavailable",
+  lookup_failed:  "billingError.lookupFailed",
+};
 
 export default function CheckoutReturnBanner() {
   const params = useSearchParams();
   const router = useRouter();
+  const t = useTranslations("portal.checkoutBanner");
   const [banner, setBanner] = useState<Banner | null>(null);
   const handled = useRef(false);
 
@@ -19,30 +43,24 @@ export default function CheckoutReturnBanner() {
     const billingError = params.get("billing_error");
 
     if (enrolled === "true") {
-      setBanner({ message: "Payment received! Your membership is being activated.", variant: "success" });
+      setBanner({ key: "enrolled", variant: "success" });
     } else if (purchased === "true") {
-      setBanner({ message: "Purchase complete! Thank you.", variant: "success" });
+      setBanner({ key: "purchased", variant: "success" });
     } else if (enrolled === "false") {
-      setBanner({ message: "Enrollment was canceled. You can try again anytime.", variant: "warning" });
+      setBanner({ key: "enrollCanceled", variant: "warning" });
     } else if (purchased === "false") {
-      setBanner({ message: "Purchase was canceled. You can try again anytime.", variant: "warning" });
+      setBanner({ key: "purchaseCanceled", variant: "warning" });
     } else if (postBilling === "1") {
       // Member just returned from Stripe Customer Portal. Their
       // subscription state change is propagating via webhook; it can
       // take up to 30 s to reflect. A soft "we're updating" banner
       // closes the visual race without relying on a poll.
-      setBanner({
-        message: "Billing changes saved. It may take up to 30 seconds for your subscription status to update here.",
-        variant: "success",
-      });
+      setBanner({ key: "postBilling", variant: "success" });
     } else if (billingError) {
-      const errorCopy = {
-        no_customer: "You don't have an active subscription yet. Pick a plan to get started.",
-        stale_customer: "We couldn't find your billing profile. Please contact us and we'll help sort it out.",
-        unavailable: "Billing is temporarily unavailable. Please try again in a few minutes.",
-        lookup_failed: "We couldn't load your billing info. Please refresh and try again.",
-      }[billingError] ?? "We couldn't open the billing portal. Please try again.";
-      setBanner({ message: errorCopy, variant: "warning" });
+      setBanner({
+        key: BILLING_ERROR_KEYS[billingError] ?? "billingError.generic",
+        variant: "warning",
+      });
     } else {
       return; // No relevant params
     }
@@ -69,11 +87,11 @@ export default function CheckoutReturnBanner() {
       className={`border rounded-lg px-4 py-3 text-sm font-medium flex items-center justify-between ${colors}`}
       role="status"
     >
-      <span>{banner.message}</span>
+      <span>{t(banner.key)}</span>
       <button
         onClick={() => setBanner(null)}
         className="ml-3 opacity-60 hover:opacity-100 transition-opacity"
-        aria-label="Dismiss"
+        aria-label={t("dismiss")}
       >
         &times;
       </button>

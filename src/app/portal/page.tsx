@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { getTranslations } from "next-intl/server";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import type { MemberStatus, MemberMembership, MembershipPlan } from "@/lib/supabase/types";
@@ -20,9 +21,9 @@ import SelfCheckInCard from "./SelfCheckInCard";
 import TeamFeed from "@/components/member/TeamFeed";
 import type { PortalTodayClass } from "@/lib/actions/portal";
 import type { TeamMemberEntry, TeamActivityEntry } from "@/lib/supabase/types";
-import StatsTilesGrid from "@/components/member/StatsTilesGrid";
 import BeltVisual from "@/components/ui/BeltVisual";
 import PortalCheckInsCard from "./PortalCheckInsCard";
+import PortalStatsCard from "./PortalStatsCard";
 import XpProgressCard from "@/components/member/XpProgressCard";
 import StreakCard from "@/components/member/StreakCard";
 import BadgeGrid from "@/components/member/BadgeGrid";
@@ -45,9 +46,15 @@ const STATUS_COLORS: Record<MemberStatus, string> = {
 type ActiveMembership = MemberMembership & { membership_plans: Pick<MembershipPlan, "name" | "price_cents" | "billing_interval"> | null };
 
 export default async function PortalHomePage() {
-  const [supabase, profile] = await Promise.all([
+  // getTranslations, not useTranslations: this is an async component, and hooks
+  // can't be called after an await.
+  const [supabase, profile, t, tSignedOut, tStatus, tBelt] = await Promise.all([
     Promise.resolve(createClient()),
     getGymProfile(),
+    getTranslations("portal.home"),
+    getTranslations("portal.signedOut"),
+    getTranslations("portal.memberStatus"),
+    getTranslations("portal.belt"),
   ]);
   const { data: userData } = await supabase.auth.getUser();
 
@@ -58,15 +65,17 @@ export default async function PortalHomePage() {
           <div className="h-1 w-full bg-gradient-to-r from-yellow to-blue-mid to-purple-light -mx-8 -mt-8 mb-8 rounded-t-lg" style={{ width: "calc(100% + 4rem)" }} />
           <div className="text-center mb-8">
             <div className="font-display text-2xl text-black dark:text-ink tracking-tight">{profile.logoText} &bull; {profile.cityName.toUpperCase()}</div>
-            <div className="text-sm text-muted mt-1">Member Portal</div>
+            <div className="text-sm text-muted mt-1">{tSignedOut("subtitle")}</div>
           </div>
           <div className="space-y-3">
             <Link
               href="/portal/login"
               className="block w-full py-2.5 bg-black text-white dark:bg-yellow dark:text-black rounded font-semibold text-sm text-center hover:bg-near-black dark:hover:bg-yellow-deep transition-colors"
             >
-              Sign In
+              {tSignedOut("signIn")}
             </Link>
+            {/* Admin-authored, straight from site_settings — the profe writes this
+                label, so it is not the catalogue's to translate. */}
             <Link
               href="/join"
               className="block w-full py-2.5 bg-white dark:bg-portal-card text-black dark:text-ink rounded font-semibold text-sm text-center border border-line hover:border-black dark:hover:border-yellow transition-colors"
@@ -75,9 +84,9 @@ export default async function PortalHomePage() {
             </Link>
           </div>
           <p className="mt-6 text-center text-xs text-muted">
-            Forgot your password?{" "}
+            {tSignedOut("forgotPrompt")}{" "}
             <Link href="/portal/forgot-password" className="text-black dark:text-ink underline underline-offset-2 hover:opacity-70">
-              Reset it here
+              {tSignedOut("forgotLink")}
             </Link>
           </p>
         </div>
@@ -150,7 +159,7 @@ export default async function PortalHomePage() {
   try {
     todayClasses = await getOwnTodayClasses();
   } catch {
-    // Falls through to "No classes on the schedule today."
+    // Falls through to SelfCheckInCard's noClassesToday empty state.
   }
 
   let teamLeaderboard: TeamMemberEntry[] = [];
@@ -167,7 +176,7 @@ export default async function PortalHomePage() {
   if (!member) {
     return (
       <div className="text-center py-16 text-muted">
-        No member record found for your account.
+        {t("noMemberRecord")}
       </div>
     );
   }
@@ -194,15 +203,20 @@ export default async function PortalHomePage() {
 
       <div>
         <h1 className="font-display text-3xl text-black dark:text-ink">
-          Welcome back, {member.first_name}
+          {t("welcome", { firstName: member.first_name })}
         </h1>
         <div className="mt-2 flex items-center gap-2">
+          {/* `capitalize` is gone with the raw status: the enum value used to be
+              rendered as-is ("trial"), so it needed the CSS to look like a label.
+              The catalogue carries its own casing. */}
           <span
-            className={`inline-block px-2 py-0.5 rounded text-xs font-semibold capitalize ${STATUS_COLORS[member.status as MemberStatus]}`}
+            className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${STATUS_COLORS[member.status as MemberStatus]}`}
           >
-            {member.status}
+            {tStatus(member.status as MemberStatus)}
           </span>
-          <span className="text-sm text-muted">member since {formatDateTz(member.created_at, profile.timezone)}</span>
+          <span className="text-sm text-muted">
+            {t("memberSince", { date: formatDateTz(member.created_at, profile.timezone) })}
+          </span>
         </div>
       </div>
 
@@ -211,7 +225,7 @@ export default async function PortalHomePage() {
           they came to look at. */}
       <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5">
         <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">
-          Check in to a class
+          {t("checkInHeading")}
         </div>
         <SelfCheckInCard classes={todayClasses} />
       </div>
@@ -229,15 +243,19 @@ export default async function PortalHomePage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Belt rank card */}
         <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5 flex flex-col">
-          <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">Current Rank</div>
+          <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">{t("rankHeading")}</div>
           <BeltVisual
             belt={(member.belt ?? "white") as "white" | "blue" | "purple" | "brown" | "black"}
             stripes={member.stripes ?? 0}
           />
-          <div className="mt-2 text-sm text-ink capitalize font-semibold">
-            {member.belt ?? "white"} belt
+          {/* "cinturón blanco", not "white belt" — Spanish puts the noun first, so
+              the colour can't be interpolated as a bare adjective before a literal
+              "belt". `first-letter:uppercase` replaces `capitalize`, which would
+              have upper-cased both words. */}
+          <div className="mt-2 text-sm text-ink font-semibold first-letter:uppercase">
+            {t("beltLabel", { belt: tBelt(member.belt ?? "white") })}
             {(member.stripes ?? 0) > 0 && (
-              <span className="font-normal text-muted"> · {member.stripes} stripe{member.stripes === 1 ? "" : "s"}</span>
+              <span className="font-normal text-muted"> · {t("stripes", { count: member.stripes ?? 0 })}</span>
             )}
           </div>
         </div>
@@ -251,12 +269,19 @@ export default async function PortalHomePage() {
 
         {/* Waiver card */}
         <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5 flex flex-col">
-          <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Waiver</div>
+          <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">{t("waiverHeading")}</div>
           {member.waiver_signed_at ? (
             <>
-              <div className="font-display text-lg text-success">Signed</div>
+              <div className="font-display text-lg text-success">{t("waiverSigned")}</div>
               <div className="text-sm text-muted mt-1">
-                Signed as <span className="font-semibold text-black dark:text-ink tracking-widest">{memberInitials}</span>
+                {t.rich("waiverSignedAs", {
+                  initials: memberInitials,
+                  strong: (chunks) => (
+                    <span className="font-semibold text-black dark:text-ink tracking-widest">
+                      {chunks}
+                    </span>
+                  ),
+                })}
               </div>
               <div className="text-xs text-muted mt-0.5">
                 {formatDateTimeTz(member.waiver_signed_at, profile.timezone)}
@@ -265,38 +290,38 @@ export default async function PortalHomePage() {
                 href="/portal/profile?tab=waiver"
                 className="mt-auto pt-3 text-sm text-black dark:text-ink underline underline-offset-2 hover:opacity-70"
               >
-                View details
+                {t("waiverViewDetails")}
               </Link>
             </>
           ) : (
             <>
-              <div className="font-display text-lg text-danger">Not Signed</div>
-              <div className="text-sm text-muted mt-1">Please contact the gym</div>
+              <div className="font-display text-lg text-danger">{t("waiverNotSigned")}</div>
+              <div className="text-sm text-muted mt-1">{t("waiverContactGym")}</div>
             </>
           )}
         </div>
 
         {/* Quick links card */}
         <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5 flex flex-col">
-          <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">Quick Links</div>
+          <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">{t("quickLinksHeading")}</div>
           <Link
             href="/portal/profile"
             className="block w-full py-2.5 bg-black text-white dark:bg-yellow dark:text-black rounded font-semibold text-sm text-center hover:bg-near-black dark:hover:bg-yellow-deep transition-colors mb-3"
           >
-            Edit Profile
+            {t("editProfile")}
           </Link>
           <div className="space-y-2">
             <Link
               href="/portal/profile?tab=emergency"
               className="block text-sm text-black dark:text-ink underline underline-offset-2 hover:opacity-70"
             >
-              Emergency Contacts
+              {t("emergencyContacts")}
             </Link>
             <Link
               href="/portal/profile?tab=billing"
               className="block text-sm text-black dark:text-ink underline underline-offset-2 hover:opacity-70"
             >
-              Billing History
+              {t("billingHistory")}
             </Link>
             {/* Self-serve billing — goes to Stripe Customer Portal.
                 Members can cancel (at period end), update payment
@@ -307,7 +332,7 @@ export default async function PortalHomePage() {
               href="/api/portal/billing"
               className="block text-sm text-black dark:text-ink underline underline-offset-2 hover:opacity-70"
             >
-              Manage billing ↗
+              {t("manageBilling")} ↗
             </a>
           </div>
         </div>
@@ -316,16 +341,12 @@ export default async function PortalHomePage() {
       {/* Stats + today's check-ins — side-by-side on tablet+, stacked on mobile */}
       <div className="grid grid-cols-1 md:grid-cols-[7fr_3fr] lg:grid-cols-2 gap-4">
         <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5">
-          <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">Your Stats</div>
-          <StatsTilesGrid
-            memberStats={memberStats}
-            gymRankings={gymRankings}
-            variant="light"
-          />
+          <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">{t("statsHeading")}</div>
+          <PortalStatsCard memberStats={memberStats} gymRankings={gymRankings} />
         </div>
         <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5">
           <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">
-            Today&apos;s Check-ins
+            {t("todaysCheckInsHeading")}
           </div>
           <PortalCheckInsCard initial={todaysCheckIns} today={today} />
         </div>

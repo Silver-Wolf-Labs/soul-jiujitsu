@@ -1,4 +1,5 @@
 import { Flame } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { colors } from "@/lib/theme";
 import type { MemberGamification } from "@/lib/supabase/types";
 
@@ -11,12 +12,15 @@ import type { MemberGamification } from "@/lib/supabase/types";
  * someone counting on a calendar.
  */
 export default function StreakCard({ data }: { data: MemberGamification }) {
+  // Portal-only, so translations are resolved here — same reasoning as
+  // XpProgressCard.
+  const t = useTranslations("portal.streak");
   const alive = data.streak_days > 0;
   const isRecord = alive && data.streak_days >= data.longest_streak;
 
   return (
     <div className="bg-white dark:bg-portal-card border border-line rounded-lg p-5 flex flex-col">
-      <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Streak</div>
+      <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">{t("heading")}</div>
 
       <div className="flex items-baseline gap-2">
         <Flame
@@ -27,25 +31,27 @@ export default function StreakCard({ data }: { data: MemberGamification }) {
         <span className={`font-display text-3xl leading-none ${alive ? "text-black dark:text-ink" : "text-muted"}`}>
           {data.streak_days}
         </span>
+        {/* The number stays in its own span above; `days` is the noun alone, and
+            ICU-selected on the count because "día"/"días" is not a suffix rule. */}
         <span className="text-sm text-muted">
-          training day{data.streak_days === 1 ? "" : "s"}
+          {t("days", { count: data.streak_days })}
         </span>
       </div>
 
       <div className="mt-2 text-xs text-muted">
         {isRecord && data.streak_days > 1 ? (
-          <span className="font-semibold text-black dark:text-ink">Personal best — keep it going</span>
+          <span className="font-semibold text-black dark:text-ink">{t("personalBest")}</span>
         ) : alive ? (
-          <>Best: {data.longest_streak} day{data.longest_streak === 1 ? "" : "s"}</>
+          t("best", { count: data.longest_streak })
         ) : data.longest_streak > 0 ? (
-          <>Train today to start again · best {data.longest_streak}</>
+          t("trainToRestart", { count: data.longest_streak })
         ) : (
-          <>Come to class to start your streak</>
+          t("startYourStreak")
         )}
       </div>
 
       <div className="mt-1 text-xs text-muted opacity-70">
-        Sundays don&apos;t break it — the gym is closed.
+        {t("sundaysDontCount")}
       </div>
     </div>
   );

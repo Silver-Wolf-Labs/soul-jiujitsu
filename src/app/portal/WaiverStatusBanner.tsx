@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 type WaiverStatus = "not_required" | "pending" | "signed" | "expired";
 
@@ -7,6 +8,8 @@ export default function WaiverStatusBanner({
 }: {
   status: WaiverStatus | null | undefined;
 }) {
+  const t = useTranslations("portal.waiverBanner");
+
   if (status !== "pending" && status !== "expired") return null;
 
   return (
@@ -16,15 +19,15 @@ export default function WaiverStatusBanner({
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-ink">
-          {status === "expired" ? "Your waiver has expired" : "Waiver signature required"}
+          {status === "expired" ? t("expiredTitle") : t("pendingTitle")}
         </p>
         <p className="text-xs text-muted mt-0.5">
-          Please review and sign our updated waiver.{" "}
+          {t("body")}{" "}
           <Link
             href="/waiver"
             className="text-ink font-semibold underline underline-offset-2 hover:opacity-70"
           >
-            Sign now
+            {t("signNow")}
           </Link>
         </p>
       </div>

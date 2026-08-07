@@ -1544,7 +1544,7 @@ export default function MemberDetailPage() {
             onDelete={id => setCheckInDeleteId(id)}
             totalLifetime={checkInCount}
             rowCap={50}
-            emptyText="No check-ins recorded yet."
+            labels={{ empty: "No check-ins recorded yet." }}
           />
         </section>
 

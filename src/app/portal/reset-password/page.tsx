@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
 import { useGymProfile } from "@/lib/gym-profile-context";
 
 export default function ResetPasswordPage() {
   const profile = useGymProfile();
   const router = useRouter();
+  const t = useTranslations("portal.resetPassword");
   const [password, setPassword]     = useState("");
   const [confirm, setConfirm]       = useState("");
   const [status, setStatus]         = useState<"idle" | "saving" | "done" | "error">("idle");
@@ -33,10 +35,14 @@ export default function ResetPasswordPage() {
     const supabase = createClient();
     let done = false;
     const ready = () => { if (!done) { done = true; setSessionReady(true); } };
+    // Deliberately sets only the status, not a message. The copy is rendered
+    // from `t` in the dead-end branch below instead, which keeps `t` out of this
+    // effect's dependencies — adding it would risk a re-run that calls
+    // setSession() a second time, after the tokens have already been stripped
+    // from the URL, turning a successful reset into "link expired".
     const fail = () => {
       if (done) return;
       done = true;
-      setErrorMsg("This reset link is invalid or has expired. Please request a new one.");
       setStatus("error");
     };
 
@@ -89,10 +95,10 @@ export default function ResetPasswordPage() {
     setErrorMsg("");
 
     if (password.length < 10) {
-      setErrorMsg("Password must be at least 10 characters. Longer passwords are stronger than shorter ones with special characters.");
+      setErrorMsg(t("tooShort"));
       return;
     }
-    if (password !== confirm) { setErrorMsg("Passwords do not match."); return; }
+    if (password !== confirm) { setErrorMsg(t("mismatch")); return; }
 
     setStatus("saving");
 
@@ -102,7 +108,13 @@ export default function ResetPasswordPage() {
       const { validatePassword } = await import("@/lib/actions/password-validation");
       const check = await validatePassword(password);
       if (!check.ok) {
-        setErrorMsg(check.message);
+        // Translated from `reason`, not from `check.message` — the action's
+        // message field is English. It's a shared server action (the signup form
+        // calls it too) and a "use server" module can't call useTranslations, so
+        // the discriminant is what crosses the boundary and the copy is resolved
+        // here. `reason` is a closed union, so a new case fails typecheck rather
+        // than silently rendering English.
+        setErrorMsg(check.reason === "breached" ? t("breached") : t("tooShort"));
         setStatus("error");
         return;
       }
@@ -114,6 +126,10 @@ export default function ResetPasswordPage() {
     const { error } = await supabase.auth.updateUser({ password });
 
     if (error) {
+      // Supabase's own message, in English. Same call as the login form: left
+      // verbatim because the useful cases here ("New password should be
+      // different from the old password") are more specific than any Spanish
+      // catch-all, and mapping them means matching on `error.code`.
       setErrorMsg(error.message);
       setStatus("error");
     } else {
@@ -133,13 +149,13 @@ export default function ResetPasswordPage() {
             {profile.logoText} &bull; {profile.cityName.toUpperCase()}
           </div>
           <p className="text-sm text-danger bg-danger-light border border-danger-border rounded px-3 py-2 mt-6">
-            {errorMsg}
+            {t("invalidLink")}
           </p>
           <Link
             href="/portal/forgot-password"
             className="mt-6 block w-full py-2.5 bg-black text-white dark:bg-yellow dark:text-black rounded font-semibold text-sm hover:bg-near-black dark:hover:bg-yellow-deep transition-colors"
           >
-            Request a new link
+            {t("requestNewLink")}
           </Link>
         </div>
       </div>
@@ -151,7 +167,7 @@ export default function ResetPasswordPage() {
       <div className="min-h-screen bg-off-white flex items-center justify-center px-4">
         <div className="text-sm text-muted text-center space-y-2">
           <div className="animate-spin w-5 h-5 border-2 border-black/10 border-t-black dark:border-ink/10 dark:border-t-ink rounded-full mx-auto" />
-          <p>Verifying your reset link…</p>
+          <p>{t("verifying")}</p>
         </div>
       </div>
     );
@@ -164,7 +180,7 @@ export default function ResetPasswordPage() {
 
         <div className="text-center mb-6">
           <div className="font-display text-2xl text-black dark:text-ink tracking-tight">{profile.logoText} &bull; {profile.cityName.toUpperCase()}</div>
-          <div className="text-sm text-muted mt-1">Set New Password</div>
+          <div className="text-sm text-muted mt-1">{t("subtitle")}</div>
         </div>
 
         {status === "done" ? (
@@ -174,13 +190,13 @@ export default function ResetPasswordPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <p className="text-sm text-ink font-semibold">Password updated!</p>
-            <p className="text-xs text-muted">Redirecting to your portal…</p>
+            <p className="text-sm text-ink font-semibold">{t("doneTitle")}</p>
+            <p className="text-xs text-muted">{t("doneRedirect")}</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">New Password</label>
+              <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">{t("newPassword")}</label>
               <input
                 type="password"
                 value={password}
@@ -188,20 +204,20 @@ export default function ResetPasswordPage() {
                 required
                 autoFocus
                 className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-yellow"
-                placeholder="Min. 10 characters — passphrase preferred"
+                placeholder={t("newPasswordPlaceholder")}
                 autoComplete="new-password"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">Confirm Password</label>
+              <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">{t("confirmPassword")}</label>
               <input
                 type="password"
                 value={confirm}
                 onChange={e => setConfirm(e.target.value)}
                 required
                 className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-yellow"
-                placeholder="Re-enter password"
+                placeholder={t("confirmPasswordPlaceholder")}
                 autoComplete="new-password"
               />
             </div>
@@ -215,7 +231,7 @@ export default function ResetPasswordPage() {
               disabled={status === "saving"}
               className="w-full py-2.5 bg-black text-white dark:bg-yellow dark:text-black rounded font-semibold text-sm hover:bg-near-black dark:hover:bg-yellow-deep disabled:opacity-50 transition-colors"
             >
-              {status === "saving" ? "Saving…" : "Update Password"}
+              {status === "saving" ? t("submitting") : t("submit")}
             </button>
           </form>
         )}

@@ -32,9 +32,24 @@ export interface AwardedBadge {
   badge_tier: "bronze" | "silver" | "gold" | "legendary";
 }
 
+/**
+ * Why a write was refused, as a closed union rather than a string.
+ *
+ * `error` below is English, and this module can't localise it: it is a plain
+ * module (see the header) shared by the kiosk and the member portal, so it has
+ * no request context to resolve a translation from — and even if it did, the
+ * kiosk and the portal are on different i18n phases. The discriminant is what
+ * crosses the boundary; each caller renders its own copy from it. A new reason
+ * added here fails typecheck at every call site rather than quietly showing
+ * English to a member.
+ */
+export type WriteCheckInFailure = "duplicate" | "write_failed";
+
 export interface WriteCheckInResult {
   ok: boolean;
+  /** English fallback copy. Prefer `reason` on any localised surface. */
   error?: string;
+  reason?: WriteCheckInFailure;
   checkInId?: number;
   awardedBadges?: AwardedBadge[];
 }
@@ -86,7 +101,11 @@ export async function writeCheckIn(
     : await dupQuery.eq("class_name", className);
 
   if ((count ?? 0) > 0) {
-    return { ok: false, error: "Already checked in to this class today" };
+    return {
+      ok: false,
+      reason: "duplicate",
+      error: "Already checked in to this class today",
+    };
   }
 
   // Resolve the slot's teachers. Multi-instructor classes credit every
@@ -128,6 +147,7 @@ export async function writeCheckIn(
     });
     return {
       ok: false,
+      reason: "write_failed",
       error: "Could not record the check-in. Please try again or ask the front desk.",
     };
   }

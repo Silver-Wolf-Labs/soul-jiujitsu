@@ -386,7 +386,9 @@ export interface CheckIn {
   class_name: string;
   class_date: string;           // ISO date "YYYY-MM-DD"
   checked_in_at: string;        // ISO timestamptz
-  source: "kiosk" | "admin";
+  /** Mirrors check_ins_source_check, which admits "portal" since the social
+   *  feed migration added member self check-in. */
+  source: "kiosk" | "admin" | "portal";
   created_at: string;
   /** Stable instructor reference (FK) snapshotted at write time.
    *  NULL when the check-in was not tied to a scheduled slot. */

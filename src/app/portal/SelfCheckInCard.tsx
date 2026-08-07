@@ -2,9 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { Check } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { selfCheckIn, type PortalTodayClass } from "@/lib/actions/portal";
 import { SpinnerButton } from "@/components/ui/Spinner";
 import { badgeIcon, TIER_STYLES } from "@/lib/badges";
+import { DEFAULT_LOCALE } from "@/i18n/config";
 import type { AwardedBadge } from "@/lib/actions/check-ins";
 
 /**
@@ -23,6 +25,11 @@ import type { AwardedBadge } from "@/lib/actions/check-ins";
  * re-run every query on the portal landing page for one boolean.
  */
 export default function SelfCheckInCard({ classes }: { classes: PortalTodayClass[] }) {
+  const t = useTranslations("portal.selfCheckIn");
+  // The four tier names are a code-side enum, so they belong in the catalogue.
+  // TIER_STYLES still carries a `label`, hard-coded Spanish, for the admin console
+  // and kiosk — both on a later i18n phase.
+  const tTier = useTranslations("portal.badges.tiers");
   const [rows, setRows] = useState(classes);
   const [error, setError] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<number | null>(null);
@@ -50,7 +57,7 @@ export default function SelfCheckInCard({ classes }: { classes: PortalTodayClass
 
   if (rows.length === 0) {
     return (
-      <p className="text-sm text-muted">No classes on the schedule today.</p>
+      <p className="text-sm text-muted">{t("noClassesToday")}</p>
     );
   }
 
@@ -78,7 +85,7 @@ export default function SelfCheckInCard({ classes }: { classes: PortalTodayClass
               // button would advertise one. Undo lives in the check-ins card.
               <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-success">
                 <Check className="w-3.5 h-3.5" aria-hidden="true" />
-                Checked in
+                {t("checkedIn")}
               </span>
             ) : (
               <button
@@ -87,7 +94,7 @@ export default function SelfCheckInCard({ classes }: { classes: PortalTodayClass
                 disabled={pendingId !== null}
                 className="shrink-0 px-3 py-1.5 bg-black text-white dark:bg-yellow dark:text-black rounded text-xs font-bold uppercase tracking-wider hover:bg-near-black dark:hover:bg-yellow-deep disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                {pendingId === c.id ? <SpinnerButton label="Checking in" /> : "Check in"}
+                {pendingId === c.id ? <SpinnerButton label={t("checkingIn")} /> : t("checkIn")}
               </button>
             )}
           </li>
@@ -103,7 +110,7 @@ export default function SelfCheckInCard({ classes }: { classes: PortalTodayClass
       {awarded.length > 0 && (
         <div className="mt-4 pt-4 border-t border-line">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-2.5">
-            {awarded.length === 1 ? "New badge unlocked" : `${awarded.length} new badges unlocked`}
+            {t("badgesUnlocked", { count: awarded.length })}
           </p>
           <div className="flex flex-col gap-2">
             {awarded.map((b) => {
@@ -125,7 +132,7 @@ export default function SelfCheckInCard({ classes }: { classes: PortalTodayClass
                       {b.badge_name}
                     </span>
                     <span className="block text-[11px] uppercase tracking-wide" style={{ color: tier.fg }}>
-                      {tier.label}
+                      {tTier(b.badge_tier)}
                     </span>
                   </span>
                 </div>
@@ -139,16 +146,26 @@ export default function SelfCheckInCard({ classes }: { classes: PortalTodayClass
 }
 
 /**
- * "HH:MM:SS" → "6:30 PM".
+ * "HH:MM:SS" → "6:30 p. m.".
  *
  * Parsed by hand rather than through Date: the string is a gym-local wall clock
  * with no date attached, so feeding it to a Date constructor would attach
  * today's date in the *browser's* zone and shift the time for anyone travelling.
+ * The wall-clock parts are then handed to Intl on a fixed UTC instant so the day
+ * period is localised ("p. m.", not "PM") without a zone conversion sneaking in.
+ *
+ * Not next-intl's useFormatter: that takes a Date, and there is no correct Date
+ * for a bare wall clock. This is a formatting detail of a schedule string rather
+ * than a translatable message, so it belongs in code, not the catalogue.
  */
 function formatTime(startTime: string): string {
   const [hStr, mStr] = startTime.split(":");
   const h = Number(hStr);
-  const suffix = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${mStr} ${suffix}`;
+  const m = Number(mStr);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return startTime;
+  return new Date(Date.UTC(2000, 0, 1, h, m)).toLocaleTimeString(DEFAULT_LOCALE, {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "UTC",
+  });
 }

@@ -8,10 +8,23 @@
  * and are NOT exposed as callable server actions.
  */
 
+import { getTranslations } from "next-intl/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getStripe, getOrigin, getPeriodEnd, CANCELLATION_NOTICE_DAYS } from "@/lib/stripe";
 import { logAuditEvent } from "@/lib/audit";
+
+/**
+ * Member-facing error copy, from the portal catalogue.
+ *
+ * Both actions in this file are called only from the member portal (verified by
+ * grep: the profile page's Payment tab and CurrentPlanCard), so every `error`
+ * string here is read by a Spanish-speaking member. getTranslations rather than
+ * the hook because a "use server" module can't call hooks.
+ */
+async function errors() {
+  return getTranslations("portal.errors");
+}
 
 // ── Billing Portal ───────────────────────────────────────────────────────────
 
@@ -22,9 +35,10 @@ import { logAuditEvent } from "@/lib/audit";
 export async function createBillingPortalSession(): Promise<
   { url: string } | { error: string }
 > {
+  const t = await errors();
   const supabase = createClient();
   const { data: userData, error: authError } = await supabase.auth.getUser();
-  if (authError || !userData.user) return { error: "Not authenticated" };
+  if (authError || !userData.user) return { error: t("notAuthenticated") };
 
   const { data: member } = await supabase
     .from("members")
@@ -33,7 +47,7 @@ export async function createBillingPortalSession(): Promise<
     .single();
 
   if (!member?.stripe_customer_id) {
-    return { error: "No billing account found. Please subscribe to a plan first." };
+    return { error: t("noBillingAccount") };
   }
 
   try {
@@ -46,7 +60,7 @@ export async function createBillingPortalSession(): Promise<
     return { url: session.url };
   } catch (err) {
     console.error("[createBillingPortalSession] Stripe API error:", err);
-    return { error: "Unable to open billing portal. Please try again later." };
+    return { error: t("billingPortalUnavailable") };
   }
 }
 
@@ -64,9 +78,10 @@ export async function createBillingPortalSession(): Promise<
 export async function requestCancellation(
   membershipId: number
 ): Promise<{ cancelAt: string; chargedAgain: boolean } | { error: string }> {
+  const t = await errors();
   const supabase = createClient();
   const { data: userData, error: authError } = await supabase.auth.getUser();
-  if (authError || !userData.user) return { error: "Not authenticated" };
+  if (authError || !userData.user) return { error: t("notAuthenticated") };
 
   // Verify ownership
   const { data: member } = await supabase
@@ -74,7 +89,7 @@ export async function requestCancellation(
     .select("id")
     .eq("user_id", userData.user.id)
     .single();
-  if (!member) return { error: "Member not found" };
+  if (!member) return { error: t("memberNotFound") };
 
   const adminSupabase = createServiceClient();
   const { data: membership } = await adminSupabase
@@ -84,8 +99,8 @@ export async function requestCancellation(
     .eq("member_id", member.id)
     .single();
 
-  if (!membership) return { error: "Membership not found" };
-  if (membership.status === "canceled") return { error: "Already canceled" };
+  if (!membership) return { error: t("membershipNotFound") };
+  if (membership.status === "canceled") return { error: t("alreadyCanceled") };
 
   // Comp memberships: cancel immediately, no Stripe involved
   if (membership.is_comp || !membership.stripe_subscription_id) {

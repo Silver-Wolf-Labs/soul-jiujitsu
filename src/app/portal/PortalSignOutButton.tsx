@@ -1,10 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
 
 export default function PortalSignOutButton() {
   const router = useRouter();
+  const t = useTranslations("portal.nav");
 
   async function handleSignOut() {
     const supabase = createClient();
@@ -18,7 +20,7 @@ export default function PortalSignOutButton() {
       onClick={handleSignOut}
       className="text-sm px-3 py-1.5 border border-line rounded hover:bg-off-white transition-colors text-ink"
     >
-      Sign Out
+      {t("signOut")}
     </button>
   );
 }

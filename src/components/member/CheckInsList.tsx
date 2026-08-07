@@ -6,21 +6,59 @@ import { useIsMobile } from "@/lib/hooks/use-is-mobile";
 import { usePagination } from "@/lib/hooks/use-pagination";
 import Pager from "@/components/ui/Pager";
 
+// ── Copy ──────────────────────────────────────────────────────────────────────
+//
+// This component is shared by the member portal (Spanish, via next-intl) and the
+// admin member-detail page (still English). It therefore does NOT call
+// useTranslations itself: doing so would put Spanish rows inside an otherwise
+// English admin page, which is the same mixed-language problem in a new place.
+//
+// Instead the copy is injected. The defaults below are the English the admin page
+// already shows, so that surface is unchanged; the portal passes a Spanish set
+// resolved from the catalogue at its own call site. When the admin pages get
+// their own namespace, they pass one too and the defaults can go.
+
+export interface CheckInsListLabels {
+  empty: string;
+  undo: string;
+  /** Accessible name for the admin delete button. */
+  delete: string;
+  sourceStaff: string;
+  sourceKiosk: string;
+  /** A check-in the member made from their own phone. */
+  sourcePortal: string;
+  /** "1 total check-in" / "42 total check-ins" — plural-sensitive, hence a function. */
+  total: (count: number) => string;
+  /** "· showing most recent 50" — the leading separator is the caller's. */
+  truncated: (rowCap: number) => string;
+}
+
+const DEFAULT_LABELS: CheckInsListLabels = {
+  empty: "No check-ins yet.",
+  undo: "Undo",
+  delete: "Delete check-in",
+  sourceStaff: "staff",
+  sourceKiosk: "kiosk",
+  sourcePortal: "phone",
+  total: (n) => `${n.toLocaleString()} total check-in${n === 1 ? "" : "s"}`,
+  truncated: (rowCap) => `showing most recent ${rowCap}`,
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatCheckInDate(classDate: string): string {
+function formatCheckInDate(classDate: string, locale: string): string {
   // Parse as local midnight to avoid UTC shift on "YYYY-MM-DD" strings.
   const [y, m, d] = classDate.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+  return new Date(y, m - 1, d).toLocaleDateString(locale, {
     weekday: "short",
     month: "short",
     day: "numeric",
   });
 }
 
-function formatCheckInTime(checkedInAt: string): string {
+function formatCheckInTime(checkedInAt: string, locale: string): string {
   try {
-    return new Date(checkedInAt).toLocaleTimeString("en-US", {
+    return new Date(checkedInAt).toLocaleTimeString(locale, {
       hour: "numeric",
       minute: "2-digit",
     });
@@ -31,8 +69,28 @@ function formatCheckInTime(checkedInAt: string): string {
 
 // ── Source badge ──────────────────────────────────────────────────────────────
 
-function SourceBadge({ source }: { source: CheckInRow["source"] }) {
+/**
+ * Where the check-in came from.
+ *
+ * Three-way, where this used to be `isAdmin ? "staff" : "kiosk"`. Self check-in
+ * from the portal now exists, and under the old branch every one of those rows
+ * was labelled "kiosk" — which is exactly the row a member is most likely to be
+ * looking at, and the label was telling them they'd been checked in at a desk
+ * they never walked up to. Translating a wrong label would only have made it a
+ * confidently wrong Spanish one.
+ */
+function SourceBadge({
+  source,
+  labels,
+}: {
+  source: CheckInRow["source"];
+  labels: CheckInsListLabels;
+}) {
   const isAdmin = source === "admin";
+  const label =
+    source === "admin" ? labels.sourceStaff
+    : source === "portal" ? labels.sourcePortal
+    : labels.sourceKiosk;
   return (
     <span
       className={`text-[10px] font-mono tracking-wide px-1.5 py-0.5 rounded ${
@@ -41,7 +99,7 @@ function SourceBadge({ source }: { source: CheckInRow["source"] }) {
           : "bg-off-white text-muted"
       }`}
     >
-      {isAdmin ? "staff" : "kiosk"}
+      {label}
     </span>
   );
 }
@@ -77,8 +135,17 @@ export interface CheckInsListProps {
    * `totalLifetime > rowCap`, a "showing first N" note is rendered.
    */
   rowCap?: number;
-  /** Shown when the list is empty. */
-  emptyText?: string;
+  /**
+   * Overrides for any of the rendered strings. Merged over the English defaults,
+   * so a caller can pass only the ones it cares about. See the Copy block above
+   * for why these are props rather than catalogue lookups.
+   */
+  labels?: Partial<CheckInsListLabels>;
+  /**
+   * BCP 47 tag for the date and time columns. Defaults to "en-US" — what this
+   * component hard-coded before — so the admin page renders exactly as it did.
+   */
+  locale?: string;
   className?: string;
 }
 
@@ -103,9 +170,11 @@ export default function CheckInsList({
   canUndo,
   totalLifetime,
   rowCap,
-  emptyText = "No check-ins yet.",
+  labels: labelOverrides,
+  locale = "en-US",
   className = "",
 }: CheckInsListProps) {
+  const labels = { ...DEFAULT_LABELS, ...labelOverrides };
   const isMobile = useIsMobile();
   const effectivePageSize = isMobile ? mobilePageSize : pageSize;
   const { visible, page, setPage, totalPages } = usePagination(checkIns, effectivePageSize);
@@ -131,7 +200,7 @@ export default function CheckInsList({
   if (checkIns.length === 0) {
     return (
       <div className={`text-sm text-muted py-6 text-center ${className}`}>
-        {emptyText}
+        {labels.empty}
       </div>
     );
   }
@@ -140,8 +209,8 @@ export default function CheckInsList({
     <div className={className}>
       {totalLifetime !== undefined && (
         <p className="text-xs text-muted mb-3">
-          {totalLifetime.toLocaleString()} total check-in{totalLifetime === 1 ? "" : "s"}
-          {isTruncated && ` · showing most recent ${rowCap}`}
+          {labels.total(totalLifetime)}
+          {rowCap !== undefined && isTruncated && ` · ${labels.truncated(rowCap)}`}
         </p>
       )}
 
@@ -162,12 +231,12 @@ export default function CheckInsList({
                   <span className="text-sm font-medium text-ink truncate">
                     {row.class_name}
                   </span>
-                  <SourceBadge source={row.source} />
+                  <SourceBadge source={row.source} labels={labels} />
                 </div>
                 <div className="text-[11px] text-muted mt-0.5 font-mono">
-                  {formatCheckInDate(row.class_date)}
+                  {formatCheckInDate(row.class_date, locale)}
                   {" · "}
-                  {formatCheckInTime(row.checked_in_at)}
+                  {formatCheckInTime(row.checked_in_at, locale)}
                 </div>
               </div>
 
@@ -178,14 +247,14 @@ export default function CheckInsList({
                     disabled={isBusy}
                     className="text-xs text-muted hover:text-danger underline underline-offset-2 transition-colors"
                   >
-                    {isBusy ? "…" : "Undo"}
+                    {isBusy ? "…" : labels.undo}
                   </button>
                 )}
                 {onDelete && (
                   <button
                     onClick={() => handleDelete(row.id)}
                     disabled={isBusy}
-                    aria-label="Delete check-in"
+                    aria-label={labels.delete}
                     className="text-muted hover:text-danger transition-colors p-1 rounded hover:bg-danger/5"
                   >
                     {isBusy ? (

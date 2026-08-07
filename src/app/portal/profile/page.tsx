@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useTransition, useRef } from "react";
 import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
+import { DEFAULT_LOCALE } from "@/i18n/config";
 import { useGymProfile } from "@/lib/gym-profile-context";
 import { substituteWaiverPlaceholders } from "@/lib/waiver-substitute";
 import { updateOwnProfile, updateOwnEmergencyContact, updateOwnTrainingInfo, getOwnBeltHistory, getOwnCheckIns } from "@/lib/actions/portal";
@@ -23,15 +25,23 @@ import type {
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type Tab = "personal" | "emergency" | "training" | "waiver" | "payment" | "billing" | "activity";
+
+/**
+ * Tab ids only — the labels moved to portal.profile.tabs.
+ *
+ * These same ids are the `?tab=` values that deep links from the portal home
+ * carry, so they must stay as they are: they're URL contract, not copy. That is
+ * also why the label can't just be derived from the id.
+ */
 const TABS = [
-  { id: "personal",  label: "Personal" },
-  { id: "emergency", label: "Emergency" },
-  { id: "training",  label: "Training" },
-  { id: "waiver",    label: "Waiver" },
-  { id: "payment",   label: "Payment" },
-  { id: "billing",   label: "Billing" },
-  { id: "activity",  label: "Activity" },
-] as const;
+  "personal",
+  "emergency",
+  "training",
+  "waiver",
+  "payment",
+  "billing",
+  "activity",
+] as const satisfies readonly Tab[];
 
 const MEMBERSHIP_STATUS_COLORS: Record<MembershipStatus, string> = {
   trialing: "bg-blue-light text-blue",
@@ -45,15 +55,20 @@ type MemberMembershipWithPlan = MemberMembership & { membership_plans: Membershi
 
 // ── Relationship options ───────────────────────────────────────────────────
 
+/**
+ * Values only. These are written to members.emergency_contact_relationship and
+ * read back by the admin console, so they stay English snake-ish keys regardless
+ * of the display language — the label comes from portal.profile.relationship.
+ */
 const RELATIONSHIP_OPTIONS = [
-  { value: "spouse",    label: "Spouse" },
-  { value: "partner",   label: "Partner" },
-  { value: "parent",    label: "Parent" },
-  { value: "sibling",   label: "Sibling" },
-  { value: "child",     label: "Child" },
-  { value: "friend",    label: "Friend" },
-  { value: "colleague", label: "Colleague" },
-  { value: "other",     label: "Other" },
+  "spouse",
+  "partner",
+  "parent",
+  "sibling",
+  "child",
+  "friend",
+  "colleague",
+  "other",
 ] as const;
 
 
@@ -89,6 +104,7 @@ function SignatureCanvas({
 }: {
   onData: (dataUrl: string | null) => void;
 }) {
+  const t = useTranslations("portal.profile.waiver");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
 
@@ -173,7 +189,7 @@ function SignatureCanvas({
         onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}
       />
       <button type="button" onClick={clear} className="text-xs text-muted hover:text-ink underline">
-        Clear
+        {t("clear")}
       </button>
     </div>
   );
@@ -196,13 +212,14 @@ function WaiverModal({
   nameInitials: string;
 }) {
   const gymProfile = useGymProfile();
+  const t = useTranslations("portal.profile.waiver");
   const mode = existingSignature ? "view" : "sign";
   const [signatureData, setSignatureData] = useState<string | null>(null);
   const [signing, setSigning] = useState(false);
   const [signError, setSignError] = useState<string | null>(null);
 
   async function handleSign() {
-    if (!signatureData) { setSignError("Please draw your signature above."); return; }
+    if (!signatureData) { setSignError(t("drawFirst")); return; }
     setSigning(true); setSignError(null);
     const result = await signWaiver(template.id, { type: "drawn", dataUrl: signatureData });
     if ("error" in result) { setSignError(result.error); setSigning(false); }
@@ -217,15 +234,29 @@ function WaiverModal({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-line flex-shrink-0">
           <div>
+            {/* The waiver title is admin-authored — it comes from the template the
+                gym wrote, so it renders as stored. */}
             <div className="font-display text-lg text-black dark:text-ink tracking-wide">{template.title}</div>
             <div className="text-xs text-muted mt-0.5">
-              Version {template.version}
+              {t("version", { version: template.version })}
+              {/* Whole clauses, separator included: the " · " and the "on {date}"
+                  were concatenated in JS before, which left the word order English.
+                  These are plain strings (no markup), so no t.rich needed. */}
               {existingSignature
-                ? ` · ${existingSignature.signature_type === "typed" ? `Signed with initials ${existingSignature.typed_initials ?? nameInitials}` : "Signed with signature"} on ${formatDateTimeTz(existingSignature.signed_at, gymProfile.timezone)}`
-                : " · Please read and sign"}
+                ? existingSignature.signature_type === "typed"
+                  ? t("signedWithInitialsOn", {
+                      initials: existingSignature.typed_initials ?? nameInitials,
+                      date: formatDateTimeTz(existingSignature.signed_at, gymProfile.timezone),
+                    })
+                  : t("signedWithSignatureOn", {
+                      date: formatDateTimeTz(existingSignature.signed_at, gymProfile.timezone),
+                    })
+                : t("pleaseReadAndSign")}
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted hover:text-ink rounded-full hover:bg-off-white transition-colors">
+          {/* aria-label added along with the catalogue key: the button is an icon
+              only, so before this it announced as an unnamed button. */}
+          <button onClick={onClose} aria-label={t("close")} className="w-8 h-8 flex items-center justify-center text-muted hover:text-ink rounded-full hover:bg-off-white transition-colors">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-4 h-4">
               <path d="M2 2l12 12M14 2L2 14" />
             </svg>
@@ -252,18 +283,20 @@ function WaiverModal({
           {mode === "sign" ? (
             <>
               <div>
-                <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Your Signature</div>
+                <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">{t("yourSignature")}</div>
                 <SignatureCanvas onData={setSignatureData} />
               </div>
+              {/* Either drawFirst above or the signWaiver action's own copy, which
+                  already resolves from portal.errors. */}
               {signError && <p className="text-sm text-danger">{signError}</p>}
               <button
                 onClick={handleSign}
                 disabled={signing || !signatureData}
                 className="w-full py-3 bg-black text-white dark:bg-yellow dark:text-black rounded-lg font-semibold text-sm hover:bg-near-black dark:hover:bg-yellow-deep disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                {signing ? <SpinnerButton label="Signing" /> : "I agree — Sign Waiver"}
+                {signing ? <SpinnerButton label={t("signing")} /> : t("sign")}
               </button>
-              <p className="text-xs text-muted text-center">By signing, you agree to all terms in this document.</p>
+              <p className="text-xs text-muted text-center">{t("agreeNote")}</p>
             </>
           ) : existingSignature ? (
             <SignatureViewer signature={existingSignature} timezone={gymProfile.timezone} nameInitials={nameInitials} />
@@ -289,6 +322,7 @@ function SignatureViewer({
    *  consistent "Signed as XY on …" caption across signature types. */
   nameInitials: string;
 }) {
+  const t = useTranslations("portal.profile.waiver");
   const [imgUrl, setImgUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -309,14 +343,20 @@ function SignatureViewer({
 
   const attribution = (
     <p className="text-xs text-muted mt-1">
-      Signed as <span className="font-semibold text-black dark:text-ink tracking-widest">{attributionInitials}</span> on {formatDateTimeTz(signature.signed_at, timezone)}
+      {t.rich("attribution", {
+        initials: attributionInitials,
+        date: formatDateTimeTz(signature.signed_at, timezone),
+        strong: (chunks) => (
+          <span className="font-semibold text-black dark:text-ink tracking-widest">{chunks}</span>
+        ),
+      })}
     </p>
   );
 
   if (signature.signature_type === "typed" && signature.typed_initials) {
     return (
       <div>
-        <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Your Initials</div>
+        <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">{t("yourInitials")}</div>
         <div className="border border-line rounded-lg bg-off-white px-4 py-3 text-2xl font-semibold tracking-[0.3em] text-black dark:text-ink text-center select-none">
           {signature.typed_initials}
         </div>
@@ -328,14 +368,14 @@ function SignatureViewer({
   if (signature.signature_type === "drawn") {
     return (
       <div>
-        <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Your Signature</div>
+        <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">{t("yourSignature")}</div>
         {imgUrl ? (
           // bg-white with NO dark: variant, deliberately. The stored PNG is
           // ink-on-white (see SIGNATURE_PAPER); painting a dark card behind it
           // would frame a white rectangle in a dark box, and for a transparent
           // legacy PNG it would hide the signature entirely.
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={imgUrl} alt="Your signature" className="max-w-sm w-full border border-line rounded-lg bg-white p-2" />
+          <img src={imgUrl} alt={t("signatureAlt")} className="max-w-sm w-full border border-line rounded-lg bg-white p-2" />
         ) : (
           <div className="flex items-center justify-center h-20 border border-line rounded-lg bg-off-white">
             <Spinner size="sm" delay={false} />
@@ -350,10 +390,10 @@ function SignatureViewer({
   if (signature.signature_data) {
     return (
       <div>
-        <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Your Signature</div>
+        <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">{t("yourSignature")}</div>
         {/* Literal white, no dark: variant — same reason as the drawn case above. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={signature.signature_data} alt="Your signature" className="max-w-sm w-full border border-line rounded-lg bg-white p-2" />
+        <img src={signature.signature_data} alt={t("signatureAlt")} className="max-w-sm w-full border border-line rounded-lg bg-white p-2" />
         {attribution}
       </div>
     );
@@ -366,12 +406,14 @@ function SignatureViewer({
 
 export default function ProfilePage() {
   const searchParams = useSearchParams();
+  const t = useTranslations("portal.profile");
+  const tTabs = useTranslations("portal.profile.tabs");
   // Initial tab honors ?tab= so deep links from the portal home card
   // (e.g. "View details" on the waiver card) land on the right section.
   // The value is validated against the TABS list to block anything weird.
   const initialTab: Tab = (() => {
     const q = searchParams.get("tab");
-    return (TABS.find((t) => t.id === q)?.id as Tab) ?? "personal";
+    return TABS.find((id) => id === q) ?? "personal";
   })();
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [member,    setMember]    = useState<Member | null>(null);
@@ -396,26 +438,26 @@ export default function ProfilePage() {
     load();
   }, []);
 
-  if (loading) return <div className="flex justify-center py-12"><Spinner label="Loading" /></div>;
-  if (!member) return <div className="text-sm text-muted py-8">No member record found.</div>;
+  if (loading) return <div className="flex justify-center py-12"><Spinner label={t("loading")} /></div>;
+  if (!member) return <div className="text-sm text-muted py-8">{t("noMemberRecord")}</div>;
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
-      <h1 className="font-display text-2xl text-black dark:text-ink">My Profile</h1>
+      <h1 className="font-display text-2xl text-black dark:text-ink">{t("heading")}</h1>
 
       {/* Tab bar */}
       <div className="flex gap-0 border-b border-line overflow-x-auto">
-        {TABS.map((tab) => (
+        {TABS.map((id) => (
           <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            key={id}
+            onClick={() => setActiveTab(id)}
             className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors ${
-              activeTab === tab.id
+              activeTab === id
                 ? "border-b-2 border-black text-black dark:border-yellow dark:text-ink"
                 : "border-b-2 border-transparent text-muted hover:text-ink"
             }`}
           >
-            {tab.label}
+            {tTabs(id)}
           </button>
         ))}
       </div>
@@ -443,6 +485,8 @@ function PersonalInfoTab({
   member: Member;
   onSave: (data: Partial<Member>) => void;
 }) {
+  const tRoot = useTranslations("portal.profile");
+  const t = useTranslations("portal.profile.personal");
   const [firstName, setFirstName] = useState(member.first_name);
   const [lastName, setLastName] = useState(member.last_name);
   const [phone, setPhone] = useState(member.phone ?? "");
@@ -482,7 +526,7 @@ function PersonalInfoTab({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">
-            First Name
+            {t("firstName")}
           </label>
           <input
             value={firstName}
@@ -493,7 +537,7 @@ function PersonalInfoTab({
         </div>
         <div>
           <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">
-            Last Name
+            {t("lastName")}
           </label>
           <input
             value={lastName}
@@ -506,50 +550,55 @@ function PersonalInfoTab({
 
       <div>
         <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">
-          Email
+          {t("email")}
         </label>
         <input
           value={member.email}
           disabled
           className="w-full border border-line rounded px-3 py-2 text-sm bg-off-white text-muted cursor-not-allowed"
         />
-        <p className="text-xs text-muted mt-1">Contact the gym to update your email.</p>
+        <p className="text-xs text-muted mt-1">{t("emailLocked")}</p>
       </div>
 
       <div>
         <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">
-          Phone
+          {t("phone")}
         </label>
         <input
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           type="tel"
           className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-yellow"
-          placeholder="(555) 000-0000"
+          // Was "(555) 000-0000" — a US format shown to Costa Rican members. The
+          // catalogue carries the local 8-digit shape the public site already uses.
+          placeholder={t("phonePlaceholder")}
         />
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <div>
           <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">
-            Birth Month
+            {t("birthMonth")}
           </label>
           <select
             value={birthMonth}
             onChange={(e) => setBirthMonth(e.target.value ? Number(e.target.value) : "")}
             className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-yellow"
           >
-            <option value="">Month</option>
+            <option value="">{t("monthPlaceholder")}</option>
+            {/* Month names come from Intl, not the catalogue: the twelve of them are
+                data the platform already has correct for es-CR ("ene", "feb", …),
+                and duplicating them as messages would be twelve chances to typo. */}
             {Array.from({ length: 12 }, (_, i) => (
               <option key={i + 1} value={i + 1}>
-                {new Date(2000, i).toLocaleString("en-US", { month: "short" })}
+                {new Date(2000, i).toLocaleString(DEFAULT_LOCALE, { month: "short" })}
               </option>
             ))}
           </select>
         </div>
         <div>
           <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">
-            Birth Year
+            {t("birthYear")}
           </label>
           <input
             value={birthYear}
@@ -563,18 +612,20 @@ function PersonalInfoTab({
         </div>
         <div>
           <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">
-            Gender
+            {t("gender")}
           </label>
           <select
             value={gender}
             onChange={(e) => setGender(e.target.value)}
             className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-yellow"
           >
-            <option value="">Select…</option>
-            <option value="male">Male</option>
-            <option value="female">Female</option>
-            <option value="other">Other</option>
-            <option value="prefer_not_to_say">Prefer not to say</option>
+            {/* The values are the members.gender enum and stay English — they're
+                stored and read by the admin console. Only the labels translate. */}
+            <option value="">{t("select")}</option>
+            <option value="male">{t("genderMale")}</option>
+            <option value="female">{t("genderFemale")}</option>
+            <option value="other">{t("genderOther")}</option>
+            <option value="prefer_not_to_say">{t("genderPreferNotToSay")}</option>
           </select>
         </div>
       </div>
@@ -586,7 +637,7 @@ function PersonalInfoTab({
       )}
       {status === "success" && (
         <p className="text-sm text-success bg-success-light border border-success-border rounded px-3 py-2">
-          Profile updated successfully.
+          {t("saved")}
         </p>
       )}
 
@@ -595,7 +646,7 @@ function PersonalInfoTab({
         disabled={isPending || status === "saving"}
         className="px-4 py-2 bg-black text-white dark:bg-yellow dark:text-black rounded text-sm font-semibold hover:bg-near-black dark:hover:bg-yellow-deep disabled:opacity-50 transition-colors"
       >
-        {status === "saving" ? "Saving…" : "Save Changes"}
+        {status === "saving" ? tRoot("saving") : tRoot("save")}
       </button>
     </form>
   );
@@ -610,6 +661,9 @@ function EmergencyContactTab({
   member: Member;
   onSave: (data: Partial<Member>) => void;
 }) {
+  const tRoot = useTranslations("portal.profile");
+  const t = useTranslations("portal.profile.emergency");
+  const tRel = useTranslations("portal.profile.relationship");
   const [name,         setName]         = useState(member.emergency_contact_name         ?? "");
   const [phone,        setPhone]        = useState(member.emergency_contact_phone        ?? "");
   const [relationship, setRelationship] = useState(member.emergency_contact_relationship ?? "");
@@ -641,37 +695,37 @@ function EmergencyContactTab({
   return (
     <form onSubmit={handleSubmit} className="space-y-4 max-w-md">
       <div>
-        <label className={labelClass} htmlFor="ec_name">Full Name</label>
-        <input id="ec_name" value={name} onChange={e => setName(e.target.value)} className={inputClass} placeholder="Full name" />
+        <label className={labelClass} htmlFor="ec_name">{t("fullName")}</label>
+        <input id="ec_name" value={name} onChange={e => setName(e.target.value)} className={inputClass} placeholder={t("fullNamePlaceholder")} />
       </div>
       <div>
-        <label className={labelClass} htmlFor="ec_phone">Phone Number</label>
-        <input id="ec_phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} className={inputClass} placeholder="(555) 000-0000" />
+        <label className={labelClass} htmlFor="ec_phone">{t("phone")}</label>
+        <input id="ec_phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} className={inputClass} placeholder={t("phonePlaceholder")} />
       </div>
       <div>
-        <label className={labelClass} htmlFor="ec_relationship">Relationship</label>
+        <label className={labelClass} htmlFor="ec_relationship">{t("relationship")}</label>
         <select
           id="ec_relationship"
           value={relationship}
           onChange={e => setRelationship(e.target.value)}
           className={inputClass}
         >
-          <option value="">Select…</option>
-          {RELATIONSHIP_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
+          <option value="">{t("select")}</option>
+          {RELATIONSHIP_OPTIONS.map(value => (
+            <option key={value} value={value}>{tRel(value)}</option>
           ))}
         </select>
       </div>
 
       {status === "error"   && <p className="text-sm text-danger bg-danger-light border border-danger-border rounded px-3 py-2">{errorMsg}</p>}
-      {status === "success" && <p className="text-sm text-success bg-success-light border border-success-border rounded px-3 py-2">Emergency contact updated.</p>}
+      {status === "success" && <p className="text-sm text-success bg-success-light border border-success-border rounded px-3 py-2">{t("saved")}</p>}
 
       <button
         type="submit"
         disabled={isPending || status === "saving"}
         className="px-4 py-2 bg-black text-white dark:bg-yellow dark:text-black rounded text-sm font-semibold hover:bg-near-black dark:hover:bg-yellow-deep disabled:opacity-50 transition-colors"
       >
-        {status === "saving" ? "Saving…" : "Save Changes"}
+        {status === "saving" ? tRoot("saving") : tRoot("save")}
       </button>
     </form>
   );
@@ -680,6 +734,7 @@ function EmergencyContactTab({
 // ── PaymentMethodsTab ──────────────────────────────────────────────────────
 
 function PaymentMethodsTab() {
+  const t = useTranslations("portal.profile.payment");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -689,13 +744,14 @@ function PaymentMethodsTab() {
     try {
       const result = await createBillingPortalSession();
       if ("error" in result) {
+        // Already Spanish, from portal.errors — the action resolves its own copy.
         setError(result.error);
       } else {
         window.location.href = result.url;
         return; // Don't clear loading — navigating away
       }
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError(t("genericError"));
     }
     setLoading(false);
   }
@@ -716,7 +772,7 @@ function PaymentMethodsTab() {
           </svg>
         </div>
         <p className="text-sm text-muted">
-          Manage your payment methods, view invoices, and update billing info through our secure billing portal.
+          {t("intro")}
         </p>
         {error && (
           <p className="text-xs text-danger bg-danger-light border border-danger-border rounded px-3 py-2">
@@ -729,7 +785,7 @@ function PaymentMethodsTab() {
             disabled={loading}
             className="px-4 py-2 bg-black text-white dark:bg-yellow dark:text-black border border-black dark:border-yellow rounded text-sm font-semibold hover:bg-near-black dark:hover:bg-yellow-deep transition-colors disabled:opacity-50"
           >
-            {loading ? "Opening…" : "Manage Billing"}
+            {loading ? t("opening") : t("manage")}
           </button>
         </div>
       </div>
@@ -741,9 +797,11 @@ function PaymentMethodsTab() {
 
 function BillingHistoryTab({ memberships }: { memberships: MemberMembershipWithPlan[] }) {
   const gymProfile = useGymProfile();
-  function formatDateOrDash(d: string | null) { return d ? formatDateTz(d, gymProfile.timezone) : "—"; }
+  const t = useTranslations("portal.profile.billing");
+  const tStatus = useTranslations("portal.membershipStatus");
+  function formatDateOrDash(d: string | null) { return d ? formatDateTz(d, gymProfile.timezone) : t("none"); }
   if (memberships.length === 0) {
-    return <p className="text-sm text-muted">No billing history.</p>;
+    return <p className="text-sm text-muted">{t("empty")}</p>;
   }
 
   return (
@@ -751,30 +809,34 @@ function BillingHistoryTab({ memberships }: { memberships: MemberMembershipWithP
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-line">
-            <th className="text-left text-xs font-semibold text-muted uppercase tracking-wide pb-2 pr-4">Plan</th>
-            <th className="text-left text-xs font-semibold text-muted uppercase tracking-wide pb-2 pr-4">Status</th>
-            <th className="text-left text-xs font-semibold text-muted uppercase tracking-wide pb-2 pr-4">Price</th>
-            <th className="text-left text-xs font-semibold text-muted uppercase tracking-wide pb-2 pr-4">Started</th>
-            <th className="text-left text-xs font-semibold text-muted uppercase tracking-wide pb-2 pr-4">Next Billing</th>
-            <th className="text-left text-xs font-semibold text-muted uppercase tracking-wide pb-2">Ended</th>
+            <th className="text-left text-xs font-semibold text-muted uppercase tracking-wide pb-2 pr-4">{t("plan")}</th>
+            <th className="text-left text-xs font-semibold text-muted uppercase tracking-wide pb-2 pr-4">{t("status")}</th>
+            <th className="text-left text-xs font-semibold text-muted uppercase tracking-wide pb-2 pr-4">{t("price")}</th>
+            <th className="text-left text-xs font-semibold text-muted uppercase tracking-wide pb-2 pr-4">{t("started")}</th>
+            <th className="text-left text-xs font-semibold text-muted uppercase tracking-wide pb-2 pr-4">{t("nextBilling")}</th>
+            <th className="text-left text-xs font-semibold text-muted uppercase tracking-wide pb-2">{t("ended")}</th>
           </tr>
         </thead>
         <tbody>
           {memberships.map((ms) => {
             const effectivePrice = ms.override_price_cents ?? ms.locked_price_cents;
             const nextBilling = ms.ends_at
-              ? `Cancels ${formatDateOrDash(ms.ends_at)}`
+              ? t("cancelsOn", { date: formatDateOrDash(ms.ends_at) })
               : (ms.status === "active" || ms.status === "trialing") && ms.current_period_end
               ? formatDateOrDash(ms.current_period_end)
-              : "—";
+              : t("none");
             return (
               <tr key={ms.id} className="border-b border-line last:border-0">
-                <td className="py-3 pr-4 text-ink">{ms.membership_plans?.name ?? "—"}</td>
+                {/* The plan name is what the profe typed into the admin console —
+                    admin-authored, so it stays as written. */}
+                <td className="py-3 pr-4 text-ink">{ms.membership_plans?.name ?? t("none")}</td>
                 <td className="py-3 pr-4">
+                  {/* `capitalize` went with the raw enum: it was only there to make
+                      "trialing" look like a label. The catalogue carries its casing. */}
                   <span
-                    className={`inline-block px-2 py-0.5 rounded text-xs font-semibold capitalize ${MEMBERSHIP_STATUS_COLORS[ms.status]}`}
+                    className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${MEMBERSHIP_STATUS_COLORS[ms.status]}`}
                   >
-                    {ms.status}
+                    {tStatus(ms.status)}
                   </span>
                 </td>
                 <td className="py-3 pr-4 text-ink">{formatCents(effectivePrice)}</td>
@@ -793,6 +855,10 @@ function BillingHistoryTab({ memberships }: { memberships: MemberMembershipWithP
 // ── BeltHistorySection ────────────────────────────────────────────────────
 
 function BeltHistorySection() {
+  const gymProfile = useGymProfile();
+  const t = useTranslations("portal.beltHistory");
+  const tBelt = useTranslations("portal.belt");
+  const tEvent = useTranslations("portal.beltEvent");
   const [history, setHistory] = useState<BeltHistory[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -806,7 +872,7 @@ function BeltHistorySection() {
   if (loading) {
     return (
       <div>
-        <div className="block text-xs font-semibold text-muted uppercase tracking-wide mb-2">Belt History</div>
+        <div className="block text-xs font-semibold text-muted uppercase tracking-wide mb-2">{t("heading")}</div>
         <div className="flex justify-center py-4"><Spinner size="sm" delay={false} /></div>
       </div>
     );
@@ -816,8 +882,21 @@ function BeltHistorySection() {
 
   return (
     <div>
-      <div className="block text-xs font-semibold text-muted uppercase tracking-wide mb-3">Belt History</div>
-      <BeltHistoryList entries={history} />
+      <div className="block text-xs font-semibold text-muted uppercase tracking-wide mb-3">{t("heading")}</div>
+      {/* BeltHistoryList also renders in the English admin member page, so its
+          copy is injected here rather than looked up inside it. See the Copy
+          block in that file. */}
+      <BeltHistoryList
+        entries={history}
+        locale={DEFAULT_LOCALE}
+        timezone={gymProfile.timezone}
+        labels={{
+          empty: t("empty"),
+          beltLabel: (belt) => t("beltLabel", { belt: tBelt(belt as BeltColor) }),
+          eventLabel: (eventType) => tEvent(eventType),
+          promotedBy: (name) => t("promotedBy", { name }),
+        }}
+      />
     </div>
   );
 }
@@ -834,6 +913,9 @@ function TrainingTab({
   onSave: (data: Partial<Member>) => void;
 }) {
   const gymProfile = useGymProfile();
+  const tRoot = useTranslations("portal.profile");
+  const t = useTranslations("portal.profile.training");
+  const tBelt = useTranslations("portal.belt");
   const belt    = (member.belt   ?? "white") as BeltColor;
   const stripes = member.stripes ?? 0;
 
@@ -893,39 +975,46 @@ function TrainingTab({
 
       {/* Belt rank — read only */}
       <div>
-        <div className={labelClass}>Current Rank</div>
+        <div className={labelClass}>{t("currentRank")}</div>
         <BeltVisual belt={belt} stripes={stripes} />
         <div className="mt-2.5 flex items-baseline gap-2">
-          <span className="text-sm font-semibold capitalize text-ink">{belt} Belt</span>
-          <span className="text-sm text-muted">· {stripes} {stripes === 1 ? "stripe" : "stripes"}</span>
+          {/* "Cinturón azul": the colour follows the noun in Spanish, so it can't
+              be interpolated as a bare adjective. first-letter, not capitalize —
+              the latter would upper-case both words. */}
+          <span className="text-sm font-semibold first-letter:uppercase text-ink">
+            {t("beltLabel", { belt: tBelt(belt) })}
+          </span>
+          <span className="text-sm text-muted">· {t("stripes", { count: stripes })}</span>
         </div>
-        <p className="text-xs text-muted mt-1">Belt rank is managed by your coaches.</p>
+        <p className="text-xs text-muted mt-1">{t("managedByCoaches")}</p>
       </div>
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-off-white rounded-lg px-4 py-3">
           <div className="font-display text-lg text-black dark:text-ink leading-tight">{gymJoinedDate}</div>
-          <div className="text-xs text-muted mt-0.5">joined {gymProfile.shortName}</div>
+          <div className="text-xs text-muted mt-0.5">{t("joinedGym", { gym: gymProfile.shortName })}</div>
         </div>
+        {/* The "y" suffix was concatenated onto the number; it is now part of the
+            message, because Spanish abbreviates years as "a", not "y". */}
         {activeMembershipYears && (
           <div className="bg-off-white rounded-lg px-4 py-3">
-            <div className="font-display text-2xl text-black dark:text-ink">{activeMembershipYears}y</div>
-            <div className="text-xs text-muted mt-0.5">active at gym</div>
+            <div className="font-display text-2xl text-black dark:text-ink">{t("yearsShort", { years: activeMembershipYears })}</div>
+            <div className="text-xs text-muted mt-0.5">{t("activeAtGym")}</div>
           </div>
         )}
         {yearsTraining && (
           <div className="bg-off-white rounded-lg px-4 py-3">
-            <div className="font-display text-2xl text-black dark:text-ink">{yearsTraining}y</div>
-            <div className="text-xs text-muted mt-0.5">training BJJ total</div>
+            <div className="font-display text-2xl text-black dark:text-ink">{t("yearsShort", { years: yearsTraining })}</div>
+            <div className="text-xs text-muted mt-0.5">{t("trainingTotal")}</div>
           </div>
         )}
         {/* "Years on this belt" tile is hidden for white belt — a white
             belt has no awarding event, so there's no duration to show. */}
         {yearsOnBelt && belt !== "white" && (
           <div className="bg-off-white rounded-lg px-4 py-3">
-            <div className="font-display text-2xl text-black dark:text-ink">{yearsOnBelt}y</div>
-            <div className="text-xs text-muted mt-0.5">on this belt</div>
+            <div className="font-display text-2xl text-black dark:text-ink">{t("yearsShort", { years: yearsOnBelt })}</div>
+            <div className="text-xs text-muted mt-0.5">{t("onThisBelt")}</div>
           </div>
         )}
       </div>
@@ -934,18 +1023,18 @@ function TrainingTab({
           (there is no awarding event for the starting belt). */}
       {belt !== "white" && (
         <div>
-          <div className={labelClass}>Belt Awarded</div>
+          <div className={labelClass}>{t("beltAwarded")}</div>
           <div className="text-sm text-ink font-medium">
-            {beltAwardedDisplay ?? <span className="text-muted italic">Not recorded yet</span>}
+            {beltAwardedDisplay ?? <span className="text-muted italic">{t("notRecorded")}</span>}
           </div>
-          {yearsOnBelt && <p className="text-xs text-muted mt-1">{yearsOnBelt} years on this belt</p>}
-          <p className="text-xs text-muted mt-1">Set by your coaches when your belt is awarded.</p>
+          {yearsOnBelt && <p className="text-xs text-muted mt-1">{t("yearsOnBelt", { years: yearsOnBelt })}</p>}
+          <p className="text-xs text-muted mt-1">{t("setByCoaches")}</p>
         </div>
       )}
 
       {/* Training started date */}
       <div>
-        <label className={labelClass} htmlFor="training_started_date">Training Since</label>
+        <label className={labelClass} htmlFor="training_started_date">{t("trainingSince")}</label>
         <input
           id="training_started_date"
           type="date"
@@ -954,13 +1043,13 @@ function TrainingTab({
           max={new Date().toISOString().slice(0, 10)}
           className={`${inputClass} w-44`}
         />
-        <p className="text-xs text-muted mt-1">When you first started training BJJ.</p>
+        <p className="text-xs text-muted mt-1">{t("trainingSinceHelp")}</p>
       </div>
 
       {/* Feedback — reserved space prevents layout shift */}
       <div className="min-h-[2.5rem]">
         {status === "error"   && <p className="text-sm text-danger bg-danger-light border border-danger-border rounded px-3 py-2">{errorMsg}</p>}
-        {status === "success" && <p className="text-sm text-success bg-success-light border border-success-border rounded px-3 py-2">Training info updated.</p>}
+        {status === "success" && <p className="text-sm text-success bg-success-light border border-success-border rounded px-3 py-2">{t("saved")}</p>}
       </div>
 
       <button
@@ -968,7 +1057,7 @@ function TrainingTab({
         disabled={isPending || status === "saving"}
         className="px-4 py-2 bg-black text-white dark:bg-yellow dark:text-black rounded text-sm font-semibold hover:bg-near-black dark:hover:bg-yellow-deep disabled:opacity-50 transition-colors"
       >
-        {status === "saving" ? "Saving…" : "Save Changes"}
+        {status === "saving" ? tRoot("saving") : tRoot("save")}
       </button>
 
     </form>
@@ -990,6 +1079,7 @@ function WaiverTab({
   onSigned: () => void;
 }) {
   const gymProfile = useGymProfile();
+  const t = useTranslations("portal.profile.waiver");
   const [template, setTemplate] = useState<WaiverTemplate | null>(null);
   const [signature, setSignature] = useState<WaiverSignature | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1035,25 +1125,33 @@ function WaiverTab({
         </div>
         <div className="flex-1">
           <div className={`font-semibold text-sm ${signed ? "text-success" : "text-danger"}`}>
-            {signed ? "Waiver Signed" : "Waiver Not Signed"}
+            {signed ? t("signedTitle") : t("notSignedTitle")}
           </div>
           <div className={`text-xs mt-0.5 ${signed ? "text-success" : "text-danger"}`}>
             {signed ? (
               <>
+                {/* Two messages rather than one, because the date clause is shared
+                    and the initials variant carries markup. `signedOn` keeps its
+                    leading space in the catalogue — Spanish needs " el 5 de…",
+                    which is not something a JSX literal should be splicing. */}
                 {signature?.signature_type === "typed"
-                  ? <>Signed with initials <span className="font-semibold tracking-widest">{signature.typed_initials ?? nameInitials}</span></>
-                  : "Signed with signature"}
-                {" on "}
-                {formatDateTimeTz(member.waiver_signed_at!, gymProfile.timezone)}
+                  ? t.rich("signedWithInitials", {
+                      initials: signature.typed_initials ?? nameInitials,
+                      strong: (chunks) => <span className="font-semibold tracking-widest">{chunks}</span>,
+                    })
+                  : t("signedWithSignature")}
+                {t("signedOn", {
+                  date: formatDateTimeTz(member.waiver_signed_at!, gymProfile.timezone),
+                })}
               </>
-            ) : "You must sign the waiver to participate."}
+            ) : t("mustSign")}
           </div>
         </div>
       </div>
 
       {/* No template */}
       {!template && (
-        <p className="text-sm text-muted">No waiver template on file. Please contact the gym.</p>
+        <p className="text-sm text-muted">{t("noTemplate")}</p>
       )}
 
       {/* Actions */}
@@ -1062,7 +1160,7 @@ function WaiverTab({
           onClick={() => setShowModal(true)}
           className="px-5 py-2.5 bg-black text-white dark:bg-yellow dark:text-black rounded-lg text-sm font-semibold hover:bg-near-black dark:hover:bg-yellow-deep transition-colors"
         >
-          {signed ? "View Waiver & Signature" : "Read & Sign Waiver"}
+          {signed ? t("viewWaiver") : t("readAndSign")}
         </button>
       )}
 
@@ -1082,20 +1180,29 @@ function WaiverTab({
 
 // ── ActivityTab ────────────────────────────────────────────────────────────
 
+/**
+ * Colours only — the status label lives in portal.membershipStatus.
+ *
+ * It used to be carried here alongside the dot colour, which meant the same five
+ * statuses had two label sets in this one file (this table and the billing tab's
+ * `capitalize`d enum). One catalogue namespace now serves both.
+ */
 const MEMBERSHIP_TIMELINE_CONFIG: Record<MembershipStatus, {
   dot: string;
-  label: string;
   labelColor: string;
 }> = {
-  active:   { dot: "bg-success",     label: "Active",    labelColor: "text-success"    },
-  trialing: { dot: "bg-blue",       label: "Trial",     labelColor: "text-blue"       },
-  paused:   { dot: "bg-yellow",     label: "Paused",    labelColor: "text-yellow-dark"},
-  canceled: { dot: "bg-line",       label: "Canceled",  labelColor: "text-muted"      },
-  past_due: { dot: "bg-danger",     label: "Past Due",  labelColor: "text-danger"     },
+  active:   { dot: "bg-success",     labelColor: "text-success"    },
+  trialing: { dot: "bg-blue",       labelColor: "text-blue"       },
+  paused:   { dot: "bg-yellow",     labelColor: "text-yellow-dark"},
+  canceled: { dot: "bg-line",       labelColor: "text-muted"      },
+  past_due: { dot: "bg-danger",     labelColor: "text-danger"     },
 };
 
 function ActivityTab({ memberships }: { memberships: MemberMembershipWithPlan[] }) {
   const gymProfile = useGymProfile();
+  const t = useTranslations("portal.profile.activity");
+  const tStatus = useTranslations("portal.membershipStatus");
+  const tList = useTranslations("portal.checkInsList");
   const [checkIns, setCheckIns] = useState<CheckInRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -1122,17 +1229,18 @@ function ActivityTab({ memberships }: { memberships: MemberMembershipWithPlan[] 
   const last30 = checkIns.filter(c => toUtcMs(c.class_date) >= now - 30 * 86400000).length;
   const lastVisit = checkIns[0]?.class_date
     ? formatDateTz(new Date(`${checkIns[0].class_date}T00:00:00Z`), gymProfile.timezone)
-    : "—";
+    : t("none");
 
   const freq: Record<string, number> = {};
   checkIns.forEach(c => { freq[c.class_name] = (freq[c.class_name] ?? 0) + 1; });
-  const favorite = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
+  // The class name is the profe's — it renders exactly as it was entered.
+  const favorite = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] ?? t("none");
 
   const metrics = [
-    { label: "Classes (7d)",  value: String(last7) },
-    { label: "Classes (30d)", value: String(last30) },
-    { label: "Last Class",    value: lastVisit },
-    { label: "Favorite",      value: favorite },
+    { label: t("classes7d"),  value: String(last7) },
+    { label: t("classes30d"), value: String(last30) },
+    { label: t("lastClass"),  value: lastVisit },
+    { label: t("favorite"),   value: favorite },
   ];
 
   // Build membership timeline sorted most-recent first
@@ -1151,11 +1259,13 @@ function ActivityTab({ memberships }: { memberships: MemberMembershipWithPlan[] 
       {/* ── Membership History ── */}
       {sortedMemberships.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-muted uppercase tracking-wide mb-4">Membership History</h3>
+          <h3 className="text-xs font-semibold text-muted uppercase tracking-wide mb-4">{t("membershipHistory")}</h3>
           <div>
             {sortedMemberships.map((m, i) => {
               const cfg = MEMBERSHIP_TIMELINE_CONFIG[m.status];
-              const planName = m.membership_plans?.name ?? m.plan_name ?? "Membership";
+              // Plan name as the admin wrote it; only the generic stand-in for a
+              // row with no plan attached comes from the catalogue.
+              const planName = m.membership_plans?.name ?? m.plan_name ?? t("membership");
               const endDate  = m.canceled_at ?? m.ends_at;
               const isLast   = i === sortedMemberships.length - 1;
               const isFirst  = i === 0; // most recent
@@ -1163,7 +1273,9 @@ function ActivityTab({ memberships }: { memberships: MemberMembershipWithPlan[] 
               // "Rejoined" if there's a gap — i.e. previous entry (lower index = more recent) was canceled
               const prevMs = i > 0 ? sortedMemberships[i - 1] : null;
               const wasGap = prevMs && (prevMs.status === "canceled" || prevMs.status === "past_due");
-              const eventLabel = wasGap ? "Rejoined" : isFirst && sortedMemberships.length === 1 ? "Joined" : isLast ? "Joined" : "Renewed";
+              // The date is part of the message rather than appended after it:
+              // Spanish needs the "el" before it ("Entró el 5 de marzo").
+              const eventKey = wasGap ? "rejoined" : isFirst && sortedMemberships.length === 1 ? "joined" : isLast ? "joined" : "renewed";
 
               return (
                 <div key={m.id} className="flex gap-3">
@@ -1176,14 +1288,14 @@ function ActivityTab({ memberships }: { memberships: MemberMembershipWithPlan[] 
                   {/* Content */}
                   <div className="pb-5 flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-sm font-semibold ${cfg.labelColor}`}>{cfg.label}</span>
+                      <span className={`text-sm font-semibold ${cfg.labelColor}`}>{tStatus(m.status)}</span>
                       <span className="text-sm text-ink">— {planName}</span>
                     </div>
                     <div className="text-xs text-muted mt-0.5 space-y-0.5">
-                      <div>{eventLabel} {fmtDate(m.started_at)}</div>
-                      {endDate && <div>Ended {fmtDate(endDate)}</div>}
+                      <div>{t(eventKey, { date: fmtDate(m.started_at) ?? t("none") })}</div>
+                      {endDate && <div>{t("endedOn", { date: fmtDate(endDate) ?? t("none") })}</div>}
                       {m.status === "paused" && m.paused_until && (
-                        <div>Paused until {fmtDate(m.paused_until)}</div>
+                        <div>{t("pausedUntil", { date: fmtDate(m.paused_until) ?? t("none") })}</div>
                       )}
                     </div>
                   </div>
@@ -1207,18 +1319,29 @@ function ActivityTab({ memberships }: { memberships: MemberMembershipWithPlan[] 
       {/* ── Recent Classes ── */}
       {checkIns.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">Recent Classes</h3>
+          <h3 className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">{t("recentClasses")}</h3>
+          {/* Shared with the English admin member page, so copy is injected here
+              rather than resolved inside the component. See its Copy block. */}
           <CheckInsList
             checkIns={checkIns}
             totalLifetime={checkIns.length}
             rowCap={50}
-            emptyText="No classes attended yet."
+            locale={DEFAULT_LOCALE}
+            labels={{
+              empty: t("noClassesYet"),
+              undo: tList("undo"),
+              sourceStaff: tList("sourceStaff"),
+              sourceKiosk: tList("sourceKiosk"),
+              sourcePortal: tList("sourcePortal"),
+              total: (count) => tList("totalCheckIns", { count }),
+              truncated: (rowCap) => tList("showingMostRecent", { count: rowCap }),
+            }}
           />
         </div>
       )}
 
       {checkIns.length === 0 && memberships.length === 0 && (
-        <p className="text-sm text-muted">No activity yet.</p>
+        <p className="text-sm text-muted">{t("empty")}</p>
       )}
     </div>
   );

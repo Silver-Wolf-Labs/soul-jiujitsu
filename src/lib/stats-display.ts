@@ -33,25 +33,33 @@ export function ordinal(n: number): string {
 }
 
 /**
- * Converts a rank + total pair into a human-readable display value with
- * highlight and "unranked" flags.
+ * Which of the three ways a rank gets shown, plus the number to show it with.
  *
- * - When total = 0 or rank > total the member has no activity → "—" (unranked)
- * - When total < 50 use ordinal ("3rd") and highlight the top 3
- * - When total ≥ 50 use percentile ("Top 8%") and highlight top 10 %
+ * - total = 0 or rank > total → the member has no activity, so there is no rank
+ * - total < 50 → position ("3rd", "#3"), highlighted for the top 3
+ * - total ≥ 50 → percentile ("Top 8%"), highlighted for the top 10 %
+ *
+ * Deliberately not a formatted string. This is called from a component shared by
+ * the Spanish portal and the English kiosk, and the wording differs by more than
+ * a word: English has an ordinal suffix system ("3rd") and Spanish does not. So
+ * the decision — which bucket, and highlighted or not — is made here, and the
+ * call site turns it into words. Same reason the surrounding labels are injected:
+ * see the Copy block in StatsTilesGrid.
  */
-export function formatRankDisplay(
-  rank: number,
-  total: number,
-): { value: string; isHighlighted: boolean; isUnranked: boolean } {
+export type RankDisplay =
+  | { kind: "unranked" }
+  | { kind: "position"; rank: number; isHighlighted: boolean }
+  | { kind: "percentile"; percent: number; isHighlighted: boolean };
+
+export function formatRankDisplay(rank: number, total: number): RankDisplay {
   if (total === 0 || rank > total) {
-    return { value: "—", isHighlighted: false, isUnranked: true };
+    return { kind: "unranked" };
   }
   if (total < 50) {
-    return { value: ordinal(rank), isHighlighted: rank <= 3, isUnranked: false };
+    return { kind: "position", rank, isHighlighted: rank <= 3 };
   }
-  const pct = Math.ceil((rank / total) * 100);
-  return { value: `Top ${pct}%`, isHighlighted: pct <= 10, isUnranked: false };
+  const percent = Math.ceil((rank / total) * 100);
+  return { kind: "percentile", percent, isHighlighted: percent <= 10 };
 }
 
 /**

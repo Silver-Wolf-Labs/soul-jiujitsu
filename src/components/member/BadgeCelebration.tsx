@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import Modal from "@/components/ui/Modal";
 import { badgeIcon, TIER_STYLES } from "@/lib/badges";
 import { markOwnBadgesSeen } from "@/lib/actions/portal";
@@ -15,6 +16,11 @@ import type { EarnedBadge } from "@/lib/supabase/types";
  * than a modal that blocks the portal behind a spinner.
  */
 export default function BadgeCelebration({ unseen }: { unseen: EarnedBadge[] }) {
+  // These strings were already Spanish, hard-coded — the right language reached by
+  // the wrong route. Through the catalogue they are now findable and changeable in
+  // one place with the rest of the portal's copy.
+  const t = useTranslations("portal.celebration");
+  const tTier = useTranslations("portal.badges.tiers");
   const [open, setOpen] = useState(unseen.length > 0);
   const [index, setIndex] = useState(0);
 
@@ -36,8 +42,8 @@ export default function BadgeCelebration({ unseen }: { unseen: EarnedBadge[] }) 
     <Modal
       open={open}
       onClose={() => setOpen(false)}
-      title="¡Nuevo logro!"
-      subtitle={unseen.length > 1 ? `${index + 1} de ${unseen.length}` : undefined}
+      title={t("title")}
+      subtitle={unseen.length > 1 ? t("counter", { index: index + 1, total: unseen.length }) : undefined}
     >
       <div className="flex flex-col items-center text-center gap-3 py-2">
         <div
@@ -50,7 +56,7 @@ export default function BadgeCelebration({ unseen }: { unseen: EarnedBadge[] }) 
         <div>
           <div className="font-display text-2xl text-black dark:text-ink">{current.badge.name}</div>
           <div className="text-xs uppercase tracking-wide mt-0.5" style={{ color: tier.fg }}>
-            {tier.label}
+            {tTier(current.badge.tier)}
           </div>
         </div>
 
@@ -62,14 +68,14 @@ export default function BadgeCelebration({ unseen }: { unseen: EarnedBadge[] }) 
           </p>
         )}
 
-        <div className="text-sm font-semibold text-black">+{current.badge.xp_reward} XP</div>
+        <div className="text-sm font-semibold text-black">{t("xpReward", { xp: current.badge.xp_reward })}</div>
 
         <button
           type="button"
           onClick={() => (isLast ? setOpen(false) : setIndex(index + 1))}
           className="mt-2 w-full py-2.5 bg-black text-white dark:bg-yellow dark:text-black rounded font-semibold text-sm hover:bg-near-black dark:hover:bg-yellow-deep transition-colors"
         >
-          {isLast ? "¡Gracias!" : "Siguiente"}
+          {isLast ? t("done") : t("next")}
         </button>
       </div>
     </Modal>

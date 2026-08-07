@@ -1,0 +1,439 @@
+{
+  "portal": {
+    "nav": {
+      "profile": "Mi perfil",
+      "viewSite": "Ver el sitio",
+      "signOut": "Cerrar sesión"
+    },
+
+    "signedOut": {
+      "subtitle": "Portal de miembros",
+      "signIn": "Ingresar",
+      "forgotPrompt": "¿Olvidaste tu contraseña?",
+      "forgotLink": "Restablecerla aquí"
+    },
+
+    "login": {
+      "subtitle": "Ingreso de miembros",
+      "email": "Correo",
+      "password": "Contraseña",
+      "forgot": "¿Olvidaste tu contraseña?",
+      "submit": "Ingresar",
+      "submitting": "Ingresando",
+      "newMember": "¿Sos nuevo?",
+      "joinHere": "Únete aquí",
+      "backToSite": "Volver al sitio",
+      "confirmationFailed": "No se pudo confirmar tu correo. El enlace pudo haber expirado — intentá registrarte de nuevo o escribinos.",
+      "emailNotConfirmed": "Confirmá tu correo antes de ingresar. Buscá el enlace de verificación en tu bandeja de entrada.",
+      "noSession": "Ingresaste, pero no se pudo abrir la sesión. Intentá de nuevo."
+    },
+
+    "forgotPassword": {
+      "subtitle": "Restablecer contraseña",
+      "intro": "Escribí tu correo y te enviamos un enlace para restablecer tu contraseña.",
+      "email": "Correo",
+      "submit": "Enviar enlace",
+      "submitting": "Enviando",
+      "sentTitle": "Revisá tu correo. Enviamos un enlace a <strong>{email}</strong>.",
+      "sentExpiry": "El enlace vence en 1 hora.",
+      "backToSignIn": "Volver a ingresar"
+    },
+
+    "resetPassword": {
+      "subtitle": "Nueva contraseña",
+      "verifying": "Verificando tu enlace…",
+      "invalidLink": "Este enlace no es válido o ya venció. Pedí uno nuevo.",
+      "requestNewLink": "Pedir un enlace nuevo",
+      "newPassword": "Nueva contraseña",
+      "newPasswordPlaceholder": "Mínimo 10 caracteres — mejor una frase",
+      "confirmPassword": "Confirmar contraseña",
+      "confirmPasswordPlaceholder": "Repetí la contraseña",
+      "tooShort": "La contraseña debe tener al menos 10 caracteres. Una frase larga es más segura que algo corto con símbolos.",
+      "breached": "Esta contraseña apareció en una filtración de datos conocida. Elegí otra. (Verificamos contra haveibeenpwned.com — no les enviamos tu contraseña, solo un fragmento del hash.)",
+      "mismatch": "Las contraseñas no coinciden.",
+      "submit": "Actualizar contraseña",
+      "submitting": "Guardando…",
+      "doneTitle": "¡Contraseña actualizada!",
+      "doneRedirect": "Te llevamos a tu portal…"
+    },
+
+    "home": {
+      "welcome": "Hola de nuevo, {firstName}",
+      "memberSince": "miembro desde {date}",
+      "noMemberRecord": "No encontramos un registro de miembro para tu cuenta.",
+      "checkInHeading": "Marcá tu asistencia",
+      "rankHeading": "Grado actual",
+      "beltLabel": "cinturón {belt}",
+      "stripes": "{count, plural, one {# grado} other {# grados}}",
+      "waiverHeading": "Exoneración",
+      "waiverSigned": "Firmada",
+      "waiverSignedAs": "Firmada como <strong>{initials}</strong>",
+      "waiverViewDetails": "Ver detalles",
+      "waiverNotSigned": "Sin firmar",
+      "waiverContactGym": "Escribinos para firmarla",
+      "quickLinksHeading": "Accesos rápidos",
+      "editProfile": "Editar perfil",
+      "emergencyContacts": "Contactos de emergencia",
+      "billingHistory": "Historial de pagos",
+      "manageBilling": "Administrar pagos",
+      "statsHeading": "Tus números",
+      "todaysCheckInsHeading": "Asistencia de hoy",
+      "noCheckInsToday": "Hoy no has marcado ninguna clase.",
+      "undoFailed": "No se pudo deshacer la asistencia. Intentá de nuevo."
+    },
+
+    "errors": {
+      "notAuthenticated": "Tu sesión venció. Ingresá de nuevo.",
+      "memberNotFound": "No encontramos tu registro de miembro. Escribinos.",
+      "alreadyEnrolled": "Ya tenés una membresía activa.",
+      "planNotFound": "No encontramos ese plan.",
+      "planUnavailable": "Ese plan no está disponible.",
+      "dropInNotMembership": "Los planes de clase suelta no se pueden inscribir como membresía.",
+      "planNotConfigured": "Este plan todavía no está configurado para pagos. Escribinos.",
+      "paymentUnavailable": "El servicio de pagos no está disponible. Intentá de nuevo.",
+      "noBillingAccount": "Todavía no tenés una cuenta de pagos. Inscribite en un plan primero.",
+      "billingPortalUnavailable": "No pudimos abrir el portal de pagos. Intentá más tarde.",
+      "membershipNotFound": "No encontramos esa membresía.",
+      "alreadyCanceled": "Esa membresía ya está cancelada.",
+      "checkInNotFound": "No encontramos esa asistencia.",
+      "notYourCheckIn": "Esa asistencia no es tuya.",
+      "undoTodayOnly": "Solo se puede deshacer la asistencia de hoy.",
+      "classNotScheduled": "Esa clase no está en el horario.",
+      "classNotToday": "Esa clase no está programada para hoy. Recargá la página.",
+      "alreadyCheckedIn": "Ya marcaste asistencia a esta clase hoy.",
+      "checkInFailed": "No pudimos registrar tu asistencia. Intentá de nuevo o avisale a alguien en la recepción.",
+      "generic": "Algo salió mal. Intentá de nuevo."
+    },
+
+    "belt": {
+      "white": "blanco",
+      "blue": "azul",
+      "purple": "morado",
+      "brown": "café",
+      "black": "negro"
+    },
+
+    "memberStatus": {
+      "prospect": "Interesado",
+      "trial": "Prueba",
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "suspended": "Suspendido"
+    },
+
+    "selfCheckIn": {
+      "noClassesToday": "Hoy no hay clases en el horario.",
+      "checkedIn": "Marcada",
+      "checkIn": "Marcar",
+      "checkingIn": "Marcando",
+      "badgesUnlocked": "{count, plural, one {¡Nuevo logro desbloqueado!} other {¡# logros nuevos desbloqueados!}}"
+    },
+
+    "waiverBanner": {
+      "expiredTitle": "Tu exoneración venció",
+      "pendingTitle": "Falta firmar la exoneración",
+      "body": "Leé y firmá nuestra exoneración actualizada.",
+      "signNow": "Firmar ahora"
+    },
+
+    "checkoutBanner": {
+      "enrolled": "¡Pago recibido! Estamos activando tu membresía.",
+      "purchased": "¡Compra lista! Gracias.",
+      "enrollCanceled": "Se canceló la inscripción. Podés intentarlo cuando quieras.",
+      "purchaseCanceled": "Se canceló la compra. Podés intentarlo cuando quieras.",
+      "postBilling": "Guardamos los cambios de pago. El estado de tu membresía puede tardar hasta 30 segundos en actualizarse acá.",
+      "billingError": {
+        "noCustomer": "Todavía no tenés una suscripción activa. Elegí un plan para empezar.",
+        "staleCustomer": "No encontramos tu perfil de pagos. Escribinos y lo resolvemos.",
+        "unavailable": "Los pagos no están disponibles por el momento. Intentá en unos minutos.",
+        "lookupFailed": "No pudimos cargar tu información de pagos. Recargá la página e intentá de nuevo.",
+        "generic": "No pudimos abrir el portal de pagos. Intentá de nuevo."
+      },
+      "dismiss": "Cerrar"
+    },
+
+    "plan": {
+      "heading": "Plan actual",
+      "perInterval": "{price} / {interval}",
+      "noneActive": "Sin membresía activa",
+      "selectPlan": "Elegir un plan",
+      "cancelsOn": "Se cancela el <b>{date}</b>",
+      "cancelScheduled": "Tu membresía se cancela el <b>{date}</b>",
+      "chargedOnceMore": "Se te cobrará un ciclo más.",
+      "confirmCompCopy": "Esto cancela tu membresía de cortesía de inmediato.",
+      "confirmPaidCopy": "La cancelación requiere 10 días de aviso antes de tu próxima fecha de cobro. Podría cobrarse un ciclo más.",
+      "confirmCancel": "Sí, cancelar",
+      "canceling": "Cancelando",
+      "neverMind": "Mejor no",
+      "cancelMembership": "Cancelar membresía",
+      "modalTitle": "Elegí tu plan",
+      "modalSubtitle": "Mes a mes · Sin contratos · Cancelá con 10 días de aviso",
+      "close": "Cerrar",
+      "loadingPlans": "Cargando planes",
+      "noPlans": "No hay planes disponibles. Escribinos.",
+      "featured": "Destacado",
+      "enroll": "Inscribirme",
+      "enrolling": "Inscribiendo",
+      "perMonth": "/mes",
+      "perYear": "/año",
+      "oneTime": "pago único"
+    },
+
+    "billingInterval": {
+      "month": "mes",
+      "year": "año",
+      "one_time": "pago único"
+    },
+
+    "membershipStatus": {
+      "trialing": "En prueba",
+      "active": "Activa",
+      "paused": "Pausada",
+      "canceled": "Cancelada",
+      "past_due": "Pago pendiente"
+    },
+
+    "xp": {
+      "heading": "Nivel",
+      "xpTotal": "{xp} XP",
+      "progressLabel": "Nivel {level}: {into} de {total} XP",
+      "levelUnlocked": "¡Nivel {level} desbloqueado!",
+      "toNextLevel": "{remaining} XP para el nivel {level}"
+    },
+
+    "streak": {
+      "heading": "Racha",
+      "days": "{count, plural, one {día de entreno} other {días de entreno}}",
+      "personalBest": "Tu récord — seguí así",
+      "best": "{count, plural, one {Récord: # día} other {Récord: # días}}",
+      "trainToRestart": "Entrená hoy para empezar de nuevo · récord {count}",
+      "startYourStreak": "Vení a clase para empezar tu racha",
+      "sundaysDontCount": "Los domingos no la rompen — el gym está cerrado."
+    },
+
+    "badges": {
+      "heading": "Logros",
+      "earnedOfTotal": "{earned} de {total}",
+      "categories": {
+        "milestone": "Hitos",
+        "consistency": "Constancia",
+        "modality": "Estilos",
+        "skill": "Técnica",
+        "community": "Comunidad"
+      },
+      "tiers": {
+        "bronze": "Bronce",
+        "silver": "Plata",
+        "gold": "Oro",
+        "legendary": "Legendario"
+      }
+    },
+
+    "teamFeed": {
+      "heading": "El equipo",
+      "memberCount": "{count, plural, one {# miembro} other {# miembros}}",
+      "tabRanking": "Ranking",
+      "tabRecent": "Reciente",
+      "noTeammates": "Todavía no hay compañeros que mostrar.",
+      "you": "(vos)",
+      "levelAndXp": "Nivel {level} · {xp} XP",
+      "badgeCount": "{count, plural, one {# logro} other {# logros}}",
+      "longestStreak": "{count, plural, one {Racha más larga: # día} other {Racha más larga: # días}}",
+      "noActivity": "Nada todavía — sé el primero en entrenar hoy.",
+      "youEarned": "<b>Vos</b> ganaste <b>{title}</b>",
+      "otherEarned": "<b>{name}</b> ganó <b>{title}</b>",
+      "youCheckedIn": "<b>Vos</b> marcaste <b>{title}</b>",
+      "otherTrained": "<b>{name}</b> entrenó <b>{title}</b>"
+    },
+
+    "relativeTime": {
+      "justNow": "ahora mismo",
+      "minutes": "hace {count} min",
+      "hours": "{count, plural, one {hace # hora} other {hace # horas}}",
+      "yesterday": "ayer",
+      "days": "hace {count} d"
+    },
+
+    "checkInsList": {
+      "empty": "Todavía no hay asistencias.",
+      "totalCheckIns": "{count, plural, one {# asistencia en total} other {# asistencias en total}}",
+      "showingMostRecent": "mostrando las {count} más recientes",
+      "sourceStaff": "recepción",
+      "sourceKiosk": "kiosco",
+      "sourcePortal": "celular",
+      "undo": "Deshacer",
+      "deleteCheckIn": "Eliminar asistencia"
+    },
+
+    "beltHistory": {
+      "heading": "Historial de cinturones",
+      "empty": "Todavía no hay historial de cinturones.",
+      "beltLabel": "cinturón {belt}",
+      "promotedBy": "por {name}"
+    },
+
+    "beltEvent": {
+      "promotion": "Cambio de cinturón",
+      "stripe": "Grado otorgado",
+      "correction": "Corrección"
+    },
+
+    "stats": {
+      "tabYou": "Vos",
+      "tabGym": "vs. gym",
+      "thisMonth": "ESTE MES",
+      "weekStreak": "RACHA SEMANAL",
+      "allTime": "HISTÓRICO",
+      "thisWeek": "ESTA SEMANA",
+      "classes": "{count, plural, one {# clase} other {# clases}}",
+      "weeks": "{count, plural, one {# semana} other {# semanas}}",
+      "trainToday": "¡entrená hoy!",
+      "startOne": "¡empezá una!",
+      "letsGo": "¡vamos!",
+      "avgPerWeek": "prom. {count}/sem",
+      "trainToRank": "¡entrená para entrar!",
+      "ofMembers": "{count, plural, one {de # miembro} other {de # miembros}}",
+      "rankPosition": "#{rank}",
+      "rankPercentile": "Top {percent}%"
+    },
+
+    "profile": {
+      "heading": "Mi perfil",
+      "loading": "Cargando",
+      "noMemberRecord": "No encontramos un registro de miembro.",
+      "tabs": {
+        "personal": "Personales",
+        "emergency": "Emergencia",
+        "training": "Entreno",
+        "waiver": "Exoneración",
+        "payment": "Pago",
+        "billing": "Facturación",
+        "activity": "Actividad"
+      },
+      "save": "Guardar cambios",
+      "saving": "Guardando…",
+      "personal": {
+        "firstName": "Nombre",
+        "lastName": "Apellido",
+        "email": "Correo",
+        "emailLocked": "Escribinos para cambiar tu correo.",
+        "phone": "Teléfono",
+        "phonePlaceholder": "8888 8888",
+        "birthMonth": "Mes de nacimiento",
+        "monthPlaceholder": "Mes",
+        "birthYear": "Año de nacimiento",
+        "gender": "Género",
+        "select": "Elegí…",
+        "genderMale": "Hombre",
+        "genderFemale": "Mujer",
+        "genderOther": "Otro",
+        "genderPreferNotToSay": "Prefiero no decirlo",
+        "saved": "Perfil actualizado."
+      },
+      "emergency": {
+        "fullName": "Nombre completo",
+        "fullNamePlaceholder": "Nombre completo",
+        "phone": "Número de teléfono",
+        "phonePlaceholder": "8888 8888",
+        "relationship": "Parentesco",
+        "select": "Elegí…",
+        "saved": "Contacto de emergencia actualizado."
+      },
+      "relationship": {
+        "spouse": "Esposo/a",
+        "partner": "Pareja",
+        "parent": "Padre/Madre",
+        "sibling": "Hermano/a",
+        "child": "Hijo/a",
+        "friend": "Amigo/a",
+        "colleague": "Colega",
+        "other": "Otro"
+      },
+      "training": {
+        "currentRank": "Grado actual",
+        "beltLabel": "Cinturón {belt}",
+        "stripes": "{count, plural, one {# grado} other {# grados}}",
+        "managedByCoaches": "Tus profes administran el grado.",
+        "joinedGym": "entró a {gym}",
+        "activeAtGym": "activo en el gym",
+        "trainingTotal": "entrenando BJJ en total",
+        "onThisBelt": "en este cinturón",
+        "beltAwarded": "Cinturón otorgado",
+        "notRecorded": "Sin registrar",
+        "yearsShort": "{years} a",
+        "yearsOnBelt": "{years} años en este cinturón",
+        "setByCoaches": "Tus profes lo registran cuando te dan el cinturón.",
+        "trainingSince": "Entrenando desde",
+        "trainingSinceHelp": "Cuándo empezaste a entrenar BJJ.",
+        "saved": "Información de entreno actualizada."
+      },
+      "waiver": {
+        "signedTitle": "Exoneración firmada",
+        "notSignedTitle": "Exoneración sin firmar",
+        "mustSign": "Tenés que firmar la exoneración para participar.",
+        "signedWithInitials": "Firmada con las iniciales <strong>{initials}</strong>",
+        "signedWithSignature": "Firmada con firma",
+        "signedOn": " el {date}",
+        "noTemplate": "No hay exoneración registrada. Escribinos.",
+        "viewWaiver": "Ver exoneración y firma",
+        "readAndSign": "Leer y firmar exoneración",
+        "version": "Versión {version}",
+        "pleaseReadAndSign": " · Leé y firmá",
+        "signedWithInitialsOn": " · Firmada con las iniciales {initials} el {date}",
+        "signedWithSignatureOn": " · Firmada con firma el {date}",
+        "close": "Cerrar",
+        "yourSignature": "Tu firma",
+        "yourInitials": "Tus iniciales",
+        "signatureAlt": "Tu firma",
+        "clear": "Borrar",
+        "drawFirst": "Dibujá tu firma arriba.",
+        "sign": "Estoy de acuerdo — firmar",
+        "signing": "Firmando",
+        "agreeNote": "Al firmar, aceptás todos los términos de este documento.",
+        "attribution": "Firmada como <strong>{initials}</strong> el {date}"
+      },
+      "payment": {
+        "intro": "Administrá tus métodos de pago, mirá tus facturas y actualizá tu información desde nuestro portal de pagos seguro.",
+        "manage": "Administrar pagos",
+        "opening": "Abriendo…",
+        "genericError": "Algo salió mal. Intentá de nuevo."
+      },
+      "billing": {
+        "empty": "No hay historial de facturación.",
+        "plan": "Plan",
+        "status": "Estado",
+        "price": "Precio",
+        "started": "Inició",
+        "nextBilling": "Próximo cobro",
+        "ended": "Terminó",
+        "cancelsOn": "Se cancela el {date}",
+        "none": "—"
+      },
+      "activity": {
+        "membershipHistory": "Historial de membresía",
+        "membership": "Membresía",
+        "joined": "Entró el {date}",
+        "rejoined": "Volvió el {date}",
+        "renewed": "Renovó el {date}",
+        "endedOn": "Terminó {date}",
+        "pausedUntil": "Pausada hasta {date}",
+        "classes7d": "Clases (7d)",
+        "classes30d": "Clases (30d)",
+        "lastClass": "Última clase",
+        "favorite": "Favorita",
+        "recentClasses": "Clases recientes",
+        "noClassesYet": "Todavía no has asistido a clases.",
+        "empty": "Todavía no hay actividad.",
+        "none": "—"
+      }
+    },
+
+    "celebration": {
+      "title": "¡Nuevo logro!",
+      "counter": "{index} de {total}",
+      "xpReward": "+{xp} XP",
+      "next": "Siguiente",
+      "done": "¡Gracias!"
+    }
+  }
+}

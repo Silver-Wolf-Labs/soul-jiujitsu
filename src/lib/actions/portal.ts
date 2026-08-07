@@ -1,5 +1,6 @@
 "use server";
 
+import { getTranslations } from "next-intl/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { logAuditEvent } from "@/lib/audit";
@@ -17,6 +18,23 @@ import type {
 } from "@/lib/supabase/types";
 import { findOrCreateStripeCustomer, createCheckoutSession } from "@/lib/stripe";
 
+/**
+ * Portal-facing error copy.
+ *
+ * Every `error` string these actions return is rendered verbatim to a member, so
+ * it has to be Spanish and it has to come from the catalogue. Resolved through
+ * getTranslations rather than a literal because a "use server" module can't call
+ * the React hook — this is the server-side equivalent.
+ *
+ * Only for messages a member READS. A raw `error.message` from Postgres or
+ * Stripe is a developer artefact: it gets logged and replaced with `generic`
+ * rather than translated, both because it leaks schema and because there is no
+ * finite set of strings to translate.
+ */
+async function errors() {
+  return getTranslations("portal.errors");
+}
+
 export async function updateOwnProfile(data: {
   first_name: string;
   last_name: string;
@@ -25,9 +43,10 @@ export async function updateOwnProfile(data: {
   birth_year?: number | null;
   gender?: string | null;
 }): Promise<{ success: true } | { error: string }> {
+  const t = await errors();
   const supabase = createClient();
   const { data: userData, error: authError } = await supabase.auth.getUser();
-  if (authError || !userData.user) return { error: "Not authenticated" };
+  if (authError || !userData.user) return { error: t("notAuthenticated") };
 
   const { error } = await supabase
     .from("members")
@@ -41,7 +60,10 @@ export async function updateOwnProfile(data: {
     })
     .eq("user_id", userData.user.id);
 
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("[updateOwnProfile] update failed:", error.message);
+    return { error: t("generic") };
+  }
   return { success: true };
 }
 
@@ -50,9 +72,10 @@ export async function updateOwnEmergencyContact(data: {
   emergency_contact_phone: string;
   emergency_contact_relationship: string;
 }): Promise<{ success: true } | { error: string }> {
+  const t = await errors();
   const supabase = createClient();
   const { data: userData, error: authError } = await supabase.auth.getUser();
-  if (authError || !userData.user) return { error: "Not authenticated" };
+  if (authError || !userData.user) return { error: t("notAuthenticated") };
 
   const { error } = await supabase
     .from("members")
@@ -63,7 +86,10 @@ export async function updateOwnEmergencyContact(data: {
     })
     .eq("user_id", userData.user.id);
 
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("[updateOwnEmergencyContact] update failed:", error.message);
+    return { error: t("generic") };
+  }
   return { success: true };
 }
 
@@ -77,16 +103,17 @@ export async function updateOwnEmergencyContact(data: {
 export async function selfEnrollInPlan(
   plan_id: number
 ): Promise<{ success: true } | { checkoutUrl: string } | { error: string }> {
+  const t = await errors();
   const supabase = createClient();
   const { data: userData, error: authError } = await supabase.auth.getUser();
-  if (authError || !userData.user) return { error: "Not authenticated" };
+  if (authError || !userData.user) return { error: t("notAuthenticated") };
 
   const { data: member } = await supabase
     .from("members")
     .select("id, first_name, last_name, email")
     .eq("user_id", userData.user.id)
     .single();
-  if (!member) return { error: "Member record not found" };
+  if (!member) return { error: t("memberNotFound") };
 
   // Guard: no existing active/paused/trialing membership
   const { data: existing } = await supabase
@@ -96,16 +123,16 @@ export async function selfEnrollInPlan(
     .in("status", ["active", "trialing", "paused", "past_due"])
     .limit(1)
     .maybeSingle();
-  if (existing) return { error: "You already have an active membership" };
+  if (existing) return { error: t("alreadyEnrolled") };
 
   const { data: plan } = await supabase
     .from("membership_plans")
     .select("price_cents, name, billing_interval, status, visible, trial_days, stripe_product_id, stripe_default_price_id")
     .eq("id", plan_id)
     .single();
-  if (!plan) return { error: "Plan not found" };
-  if (plan.status !== "active" || !plan.visible) return { error: "Plan is not available" };
-  if (plan.billing_interval === "one_time") return { error: "Drop-in plans cannot be enrolled as memberships" };
+  if (!plan) return { error: t("planNotFound") };
+  if (plan.status !== "active" || !plan.visible) return { error: t("planUnavailable") };
+  if (plan.billing_interval === "one_time") return { error: t("dropInNotMembership") };
 
   const adminSupabase = createServiceClient();
 
@@ -121,11 +148,21 @@ export async function selfEnrollInPlan(
         p_plan_billing_interval: plan.billing_interval,
       }
     );
-    if (rpcError) return { error: rpcError.message };
-    if (rpcData?.error === "already_enrolled") {
-      return { error: "You already have an active membership" };
+    if (rpcError) {
+      console.error("[selfEnrollInPlan] enroll_trial_membership_tx failed:", rpcError.message);
+      return { error: t("generic") };
     }
-    if (rpcData?.error) return { error: rpcData.error };
+    if (rpcData?.error === "already_enrolled") {
+      return { error: t("alreadyEnrolled") };
+    }
+    // The RPC only ever returns 'already_enrolled' (handled above), so anything
+    // else is a snake_case code from a future migration — logged and shown as
+    // the catch-all rather than rendered raw, which would put an identifier
+    // like "some_new_code" in front of a member.
+    if (rpcData?.error) {
+      console.error("[selfEnrollInPlan] unrecognised RPC error code:", rpcData.error);
+      return { error: t("generic") };
+    }
 
     await logAuditEvent("CREATE", "member_memberships", String(rpcData.membership_id), {
       member_id: member.id,
@@ -141,7 +178,7 @@ export async function selfEnrollInPlan(
 
   // ── Paid path: redirect to Stripe Checkout ──────────────────────────────
   if (!plan.stripe_product_id || !plan.stripe_default_price_id) {
-    return { error: "This plan is not yet configured for payments. Please contact the gym." };
+    return { error: t("planNotConfigured") };
   }
 
   try {
@@ -162,7 +199,7 @@ export async function selfEnrollInPlan(
     return { checkoutUrl };
   } catch (err) {
     console.error("[selfEnrollInPlan] Stripe checkout creation failed:", err);
-    return { error: "Payment service unavailable. Please try again." };
+    return { error: t("paymentUnavailable") };
   }
 }
 
@@ -171,9 +208,10 @@ export async function selfEnrollInPlan(
 export async function updateOwnTrainingInfo(data: {
   training_started_at: string | null;
 }): Promise<{ success: true } | { error: string }> {
+  const t = await errors();
   const supabase = createClient();
   const { data: userData, error: authError } = await supabase.auth.getUser();
-  if (authError || !userData.user) return { error: "Not authenticated" };
+  if (authError || !userData.user) return { error: t("notAuthenticated") };
 
   const { error } = await supabase
     .from("members")
@@ -182,7 +220,10 @@ export async function updateOwnTrainingInfo(data: {
     })
     .eq("user_id", userData.user.id);
 
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("[updateOwnTrainingInfo] update failed:", error.message);
+    return { error: t("generic") };
+  }
   return { success: true };
 }
 
@@ -198,16 +239,17 @@ export async function updateOwnTrainingInfo(data: {
 export async function undoOwnCheckIn(
   checkInId: number,
 ): Promise<{ success: true } | { error: string }> {
+  const t = await errors();
   const supabase = createClient();
   const { data: userData, error: authError } = await supabase.auth.getUser();
-  if (authError || !userData.user) return { error: "Not authenticated" };
+  if (authError || !userData.user) return { error: t("notAuthenticated") };
 
   const { data: member } = await supabase
     .from("members")
     .select("id")
     .eq("user_id", userData.user.id)
     .single();
-  if (!member) return { error: "Member record not found" };
+  if (!member) return { error: t("memberNotFound") };
 
   // Use the service client here because check_ins has no row-level policy
   // permitting members to delete their own rows — and we don't want to add
@@ -220,22 +262,28 @@ export async function undoOwnCheckIn(
     .select("id, member_id, class_date, class_name")
     .eq("id", checkInId)
     .maybeSingle();
-  if (readErr) return { error: readErr.message };
-  if (!row) return { error: "Check-in not found" };
-  if (row.member_id !== member.id) return { error: "Not your check-in" };
+  if (readErr) {
+    console.error("[undoOwnCheckIn] read failed:", readErr.message);
+    return { error: t("generic") };
+  }
+  if (!row) return { error: t("checkInNotFound") };
+  if (row.member_id !== member.id) return { error: t("notYourCheckIn") };
 
   // Gym-local "today" — uses the same clock as the kiosk so late-night undo
   // and late-night check-in agree on the date boundary.
   const today = await gymToday();
   if (row.class_date !== today) {
-    return { error: "Only today's check-ins can be undone." };
+    return { error: t("undoTodayOnly") };
   }
 
   const { error } = await adminSupabase
     .from("check_ins")
     .delete()
     .eq("id", checkInId);
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("[undoOwnCheckIn] delete failed:", error.message);
+    return { error: t("generic") };
+  }
 
   await logAuditEvent("DELETE", "check_ins", String(checkInId), {
     source: "member-undo",
@@ -253,13 +301,33 @@ export async function undoOwnCheckIn(
 // but the ownership check (user → member_id) is enforced here in app code.
 
 /**
+ * Why resolveOwnMember gave up, carried on the thrown error.
+ *
+ * The message on these throws is a developer artefact: every caller except
+ * selfCheckIn lets them escape into the error boundary, where a member sees the
+ * generic error page and never the string. selfCheckIn is the one that renders
+ * the failure inline, so it reads this code and picks its own Spanish copy —
+ * matching on `error.message` would have coupled member-facing copy to a log line.
+ */
+type OwnMemberFailure = "not_authenticated" | "member_not_found";
+
+class OwnMemberError extends Error {
+  constructor(readonly code: OwnMemberFailure, message: string) {
+    super(message);
+    this.name = "OwnMemberError";
+  }
+}
+
+/**
  * Resolves the authenticated user's member record.
  * Throws if the session is missing or the user has no linked member row.
  */
 async function resolveOwnMember(): Promise<{ id: number }> {
   const supabase = createClient();
   const { data: userData, error: authError } = await supabase.auth.getUser();
-  if (authError || !userData.user) throw new Error("Not authenticated");
+  if (authError || !userData.user) {
+    throw new OwnMemberError("not_authenticated", "Not authenticated");
+  }
 
   const { data: member, error } = await supabase
     .from("members")
@@ -267,7 +335,7 @@ async function resolveOwnMember(): Promise<{ id: number }> {
     .eq("user_id", userData.user.id)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  if (!member) throw new Error("Member record not found");
+  if (!member) throw new OwnMemberError("member_not_found", "Member record not found");
   return member;
 }
 
@@ -425,6 +493,10 @@ export async function getOwnBadges(): Promise<{ earned: EarnedBadge[]; locked: B
 /**
  * Marks the member's newly-earned badges as seen, so the celebration fires once.
  * Called from the client after the modal is dismissed.
+ *
+ * The `error` strings below stay untranslated on purpose: BadgeCelebration calls
+ * this fire-and-forget (`void markOwnBadgesSeen()`) and never reads the result,
+ * so nothing here reaches a member's screen.
  */
 export async function markOwnBadgesSeen(): Promise<{ success: true } | { error: string }> {
   try {
@@ -563,11 +635,21 @@ export async function getOwnTodayClasses(): Promise<PortalTodayClass[]> {
 export async function selfCheckIn(
   scheduleSlotId: number,
 ): Promise<{ success: true; awardedBadges: AwardedBadge[] } | { error: string }> {
+  const t = await errors();
+
   let member: { id: number };
   try {
     member = await resolveOwnMember();
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Not authenticated" };
+    if (e instanceof OwnMemberError) {
+      return {
+        error: e.code === "member_not_found" ? t("memberNotFound") : t("notAuthenticated"),
+      };
+    }
+    // Anything else is the members read failing — a DB error, not something the
+    // member did.
+    console.error("[selfCheckIn] resolveOwnMember failed:", e);
+    return { error: t("generic") };
   }
 
   const service = createServiceClient();
@@ -579,12 +661,15 @@ export async function selfCheckIn(
     .eq("id", scheduleSlotId)
     .maybeSingle();
 
-  if (slotError) return { error: slotError.message };
-  if (!slot || !slot.active) return { error: "That class is not on the schedule." };
+  if (slotError) {
+    console.error("[selfCheckIn] slot read failed:", slotError.message);
+    return { error: t("generic") };
+  }
+  if (!slot || !slot.active) return { error: t("classNotScheduled") };
   // A slot from another weekday means a stale page — the member left the portal
   // open past midnight. Say so rather than silently recording the wrong day.
   if (slot.day_of_week !== pgDay) {
-    return { error: "That class isn't scheduled today. Please refresh." };
+    return { error: t("classNotToday") };
   }
 
   const result = await writeCheckIn(service, {
@@ -593,7 +678,14 @@ export async function selfCheckIn(
     scheduleSlotId: slot.id as number,
     source: "portal",
   });
-  if (!result.ok) return { error: result.error ?? "Check-in failed" };
+  // Translated from `reason`, not `result.error` — writeCheckIn is a plain shared
+  // module with no request context, so its `error` field is English. See the
+  // WriteCheckInFailure doc there.
+  if (!result.ok) {
+    return {
+      error: result.reason === "duplicate" ? t("alreadyCheckedIn") : t("checkInFailed"),
+    };
+  }
 
   await logAuditEvent("CREATE", "check_ins", String(result.checkInId ?? ""), {
     source: "member-self-checkin",

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { KioskMemberStats, GymRankings } from "@/lib/actions/check-ins";
-import { plural, formatRankDisplay } from "@/lib/stats-display";
+import { plural, ordinal, formatRankDisplay } from "@/lib/stats-display";
 
 // ── Shared stat metadata ──────────────────────────────────────────────────────
 // Single source of truth for the four stat keys used by both "You" and
@@ -10,15 +10,70 @@ import { plural, formatRankDisplay } from "@/lib/stats-display";
 
 type StatKey = "month" | "streak" | "alltime" | "week";
 
-const STAT_LABELS: Record<StatKey, string> = {
-  month:   "THIS MONTH",
-  // "WEEK STREAK", not "STREAK": the portal also shows a training-DAY streak
-  // (StreakCard), and two tiles both labelled "STREAK" showing different
-  // numbers reads as a bug. This one counts consecutive weeks with >= 1 class.
-  streak:  "WEEK STREAK",
+// ── Copy ──────────────────────────────────────────────────────────────────────
+//
+// Injected rather than looked up: this grid renders on the kiosk (English, on a
+// wall-mounted tablet, not yet migrated) as well as in the Spanish member portal.
+// Calling useTranslations here would put Spanish tiles on the kiosk. The defaults
+// are the English strings this file used to hold, so the kiosk is untouched.
+//
+// The descriptors are functions because they are count-sensitive: Spanish plural
+// rules aren't "add an s", so the portal passes ICU-formatted versions from the
+// catalogue rather than a template this file could interpolate.
+
+export interface StatsTilesLabels {
+  tabYou: string;
+  tabGym: string;
+  month: string;
+  /** "WEEK STREAK", not "STREAK": the portal also shows a training-DAY streak
+   *  (StreakCard), and two tiles both labelled "STREAK" showing different
+   *  numbers reads as a bug. This one counts consecutive weeks with >= 1 class. */
+  streak: string;
+  alltime: string;
+  week: string;
+  classes: (count: number) => string;
+  weeks: (count: number) => string;
+  /** Shown under a zero in the month tile. */
+  trainToday: string;
+  /** Shown under a zero week-streak. */
+  startOne: string;
+  /** Shown in the week tile when there is no 4-week average yet. */
+  letsGo: string;
+  avgPerWeek: (avg: number) => string;
+  /** Shown when the member has no rank in a gym tile. */
+  trainToRank: string;
+  ofMembers: (count: number) => string;
+  /**
+   * The rank itself, for a gym under 50 members. English has an ordinal suffix
+   * system ("3rd") that Spanish has no equivalent for, so this is a function over
+   * the raw rank rather than a string this file could format — see RankDisplay.
+   */
+  rankPosition: (rank: number) => string;
+  /** The rank as a percentile, for a gym of 50 or more. */
+  rankPercentile: (percent: number) => string;
+}
+
+const DEFAULT_LABELS: StatsTilesLabels = {
+  tabYou: "You",
+  tabGym: "vs Gym",
+  month: "THIS MONTH",
+  streak: "WEEK STREAK",
   alltime: "ALL-TIME",
-  week:    "THIS WEEK",
+  week: "THIS WEEK",
+  classes: (n) => plural(n, "class"),
+  weeks: (n) => plural(n, "week"),
+  trainToday: "train today!",
+  startOne: "start one!",
+  letsGo: "let’s go!",
+  avgPerWeek: (avg) => `avg ${avg}/wk`,
+  trainToRank: "train to rank!",
+  ofMembers: (n) => `of ${plural(n, "member")}`,
+  rankPosition: (rank) => ordinal(rank),
+  rankPercentile: (percent) => `Top ${percent}%`,
 };
+
+// The four StatKey values are also the label keys, so a tile's heading is just
+// labels[key] — no lookup table.
 
 // ── StatCard ──────────────────────────────────────────────────────────────────
 
@@ -104,10 +159,12 @@ function TabToggle({
   active,
   onChange,
   variant,
+  labels,
 }: {
   active: "you" | "gym";
   onChange: (v: "you" | "gym") => void;
   variant: "light" | "dark";
+  labels: StatsTilesLabels;
 }) {
   const wrapCls =
     variant === "dark"
@@ -130,15 +187,18 @@ function TabToggle({
 
   return (
     <div className={wrapCls}>
+      {/* `capitalize` dropped from the button: it upper-cased every word, so the
+          kiosk's second tab actually read "Vs Gym". The labels now carry their own
+          casing, which is the only way "vs. gym" can stay lower-case in Spanish. */}
       {(["you", "gym"] as const).map(tab => (
         <button
           key={tab}
           onClick={() => onChange(tab)}
-          className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-all capitalize ${
+          className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-all ${
             active === tab ? activeCls : inactiveCls
           }`}
         >
-          {tab === "you" ? "You" : "vs Gym"}
+          {tab === "you" ? labels.tabYou : labels.tabGym}
         </button>
       ))}
     </div>
@@ -150,7 +210,7 @@ function TabToggle({
 interface YouStat {
   key: StatKey;
   value: (s: KioskMemberStats) => string;
-  descriptor: (s: KioskMemberStats) => string;
+  descriptor: (s: KioskMemberStats, l: StatsTilesLabels) => string;
   highlight?: (s: KioskMemberStats) => boolean;
   dim?: (s: KioskMemberStats) => boolean;
 }
@@ -159,26 +219,26 @@ const YOU_STATS: YouStat[] = [
   {
     key: "month",
     value: s => String(s.classes_this_month),
-    descriptor: s => s.classes_this_month === 0 ? "train today!" : plural(s.classes_this_month, "class"),
+    descriptor: (s, l) => s.classes_this_month === 0 ? l.trainToday : l.classes(s.classes_this_month),
     highlight: s => s.classes_this_month > 0,
     dim: s => s.classes_this_month === 0,
   },
   {
     key: "streak",
     value: s => String(s.week_streak),
-    descriptor: s => s.week_streak === 0 ? "start one!" : plural(s.week_streak, "week"),
+    descriptor: (s, l) => s.week_streak === 0 ? l.startOne : l.weeks(s.week_streak),
     highlight: s => s.week_streak >= 4,
     dim: s => s.week_streak === 0,
   },
   {
     key: "alltime",
     value: s => String(s.all_time_classes),
-    descriptor: s => plural(s.all_time_classes, "class"),
+    descriptor: (s, l) => l.classes(s.all_time_classes),
   },
   {
     key: "week",
     value: s => String(s.classes_this_week),
-    descriptor: s => s.avg_per_week > 0 ? `avg ${s.avg_per_week}/wk` : "let\u2019s go!",
+    descriptor: (s, l) => s.avg_per_week > 0 ? l.avgPerWeek(s.avg_per_week) : l.letsGo,
     dim: s => s.classes_this_week === 0,
   },
 ];
@@ -202,6 +262,8 @@ export interface StatsTilesGridProps {
    * "dark"  — translucent tiles (kiosk).
    */
   variant?: "light" | "dark";
+  /** Overrides for the rendered strings, merged over the English defaults. */
+  labels?: Partial<StatsTilesLabels>;
   className?: string;
 }
 
@@ -213,15 +275,17 @@ export default function StatsTilesGrid({
   memberStats,
   gymRankings,
   variant = "light",
+  labels: labelOverrides,
   className = "",
 }: StatsTilesGridProps) {
+  const labels = { ...DEFAULT_LABELS, ...labelOverrides };
   const showTabs = gymRankings !== undefined;
   const [view, setView] = useState<"you" | "gym">("you");
 
   if (!memberStats) {
     return (
       <div className={className}>
-        {showTabs && <TabToggle active={view} onChange={setView} variant={variant} />}
+        {showTabs && <TabToggle active={view} onChange={setView} variant={variant} labels={labels} />}
         <div className="grid grid-cols-2 gap-3">
           {[0, 1, 2, 3].map(i => <SkeletonCard key={i} variant={variant} />)}
         </div>
@@ -231,7 +295,7 @@ export default function StatsTilesGrid({
 
   return (
     <div className={className}>
-      {showTabs && <TabToggle active={view} onChange={setView} variant={variant} />}
+      {showTabs && <TabToggle active={view} onChange={setView} variant={variant} labels={labels} />}
 
       <div className="grid grid-cols-2 gap-3">
         {(!showTabs || view === "you") &&
@@ -239,8 +303,8 @@ export default function StatsTilesGrid({
             <StatCard
               key={cfg.key}
               number={cfg.value(memberStats)}
-              label={STAT_LABELS[cfg.key]}
-              descriptor={cfg.descriptor(memberStats)}
+              label={labels[cfg.key]}
+              descriptor={cfg.descriptor(memberStats, labels)}
               highlight={cfg.highlight?.(memberStats) ?? false}
               dim={cfg.dim?.(memberStats) ?? false}
               variant={variant}
@@ -252,14 +316,22 @@ export default function StatsTilesGrid({
             ? GYM_STAT_ORDER.map(key => {
                 const stat = gymRankings[key];
                 const r = formatRankDisplay(stat.rank, stat.total);
+                // The em dash is the absence of a number rather than a word, so
+                // it stays here; the other two branches are language.
+                const number =
+                  r.kind === "unranked"
+                    ? "—"
+                    : r.kind === "position"
+                    ? labels.rankPosition(r.rank)
+                    : labels.rankPercentile(r.percent);
                 return (
                   <StatCard
                     key={key}
-                    number={r.value}
-                    label={STAT_LABELS[key]}
-                    descriptor={r.isUnranked ? "train to rank!" : `of ${plural(stat.total, "member")}`}
-                    highlight={r.isHighlighted}
-                    dim={r.isUnranked}
+                    number={number}
+                    label={labels[key]}
+                    descriptor={r.kind === "unranked" ? labels.trainToRank : labels.ofMembers(stat.total)}
+                    highlight={r.kind !== "unranked" && r.isHighlighted}
+                    dim={r.kind === "unranked"}
                     variant={variant}
                   />
                 );
