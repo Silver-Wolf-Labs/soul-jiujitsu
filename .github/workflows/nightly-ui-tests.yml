@@ -394,7 +394,13 @@ jobs:
             // People to notify. Assignment is best-effort: a username that is not
             // a repo collaborator makes the API reject the whole call, so we try
             // and fall back to creating the issue unassigned.
-            const ASSIGNEES = ['fabriziomendez'];
+            //
+            // 'fau1095', not 'fabriziomendez' — the latter is not a collaborator on
+            // this repo, so every assignment attempt failed and each nightly issue
+            // was opened unassigned. That failure is only a core.warning() buried in
+            // the log, so the issues looked fine while nobody was actually notified.
+            // Check `gh api repos/:owner/:repo/collaborators` before editing this.
+            const ASSIGNEES = ['fau1095'];
 
             let summaryMarkdown = '';
             try {
