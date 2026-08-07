@@ -28,6 +28,15 @@ const nextConfig = {
       [
         "connect-src 'self'",
         "https://*.supabase.co",
+        // The Realtime socket needs its own entry: a CSP source expression
+        // matches the scheme exactly, so the https:// host above does NOT
+        // authorize wss://. Without it the portal's team feed silently loses its
+        // live updates and falls back to polling, while every page load posts a
+        // connect-src violation to /api/csp-report. Verified in Chromium: the
+        // blocked socket fails via onerror rather than throwing, so it degrades
+        // rather than crashing — but it does mean this is easy to break without
+        // anyone noticing except the report endpoint.
+        "wss://*.supabase.co",
         "https://api.stripe.com",
         // CloudWatch RUM: sessions ingest via the dataplane, guest
         // credentials via Cognito identity pools + STS.

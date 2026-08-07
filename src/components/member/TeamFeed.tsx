@@ -23,9 +23,10 @@ import type { TeamMemberEntry, TeamActivityEntry } from "@/lib/supabase/types";
  *      display name, belt, level or streak — and the ranking of every other row
  *      may have changed too. Recomputing server-side is the only correct answer.
  *   2. Realtime delivers rows through RLS, which for `check_ins` means a member
- *      only sees their own. The feed's data comes from SECURITY DEFINER RPCs
- *      instead, so treating the event as a notification rather than as data
- *      keeps one source of truth for what a member is allowed to see.
+ *      only sees their own (verified — see POLL_INTERVAL_MS). The feed's data
+ *      comes from SECURITY DEFINER RPCs instead, so treating the event as a
+ *      notification rather than as data keeps one source of truth for what a
+ *      member is allowed to see.
  *
  * Bursts are coalesced: a class of fifteen ending at once fires fifteen events,
  * and refetching per event would mean fifteen round-trips for one visible
@@ -36,15 +37,25 @@ const REFRESH_DEBOUNCE_MS = 1200;
 /**
  * Fallback poll, and it is load-bearing rather than belt-and-braces.
  *
- * Realtime only delivers for tables in the `supabase_realtime` publication, and
- * a subscription to a table that ISN'T in it still reports SUBSCRIBED and then
- * silently delivers nothing — measured against staging: 0 events for a real
- * INSERT. The migration that adds check_ins and member_badges to the publication
- * (20260810000000_realtime_team_feed.sql) has to be applied for the socket path
- * to do anything at all; until then this poll is the only thing keeping the feed
- * current, and it also covers a socket dropping on a flaky phone connection.
+ * Realtime delivers rows through RLS, and the `check_ins` policy scopes a member
+ * to their own. Measured against staging with the publication in place: two
+ * INSERTs, one for the subscriber and one for another member, and only the
+ * subscriber's own arrived. So the socket makes a member's OWN check-in appear
+ * instantly, and this poll is what surfaces everyone else's — which is most of
+ * what the panel is for.
+ *
+ * Two prerequisites, both easy to lose: the tables have to be in the
+ * `supabase_realtime` publication (20260810000000_realtime_team_feed.sql — a
+ * subscription to a table that isn't still reports SUBSCRIBED and then silently
+ * delivers nothing), and connect-src has to allow wss://*.supabase.co. The poll
+ * is also the only thing covering a socket that drops on a flaky phone
+ * connection, which is the common case for a gym floor.
+ *
+ * 30s rather than a minute: it is the effective latency for seeing a teammate
+ * check in, and a minute of staleness reads as a broken feed on a surface whose
+ * whole point is that it's live.
  */
-const POLL_INTERVAL_MS = 60_000;
+const POLL_INTERVAL_MS = 30_000;
 
 export default function TeamFeed({
   initialLeaderboard,
@@ -79,19 +90,35 @@ export default function TeamFeed({
 
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
-      .channel("team-feed")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "check_ins" }, scheduleRefresh)
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "check_ins" }, scheduleRefresh)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "member_badges" }, scheduleRefresh)
-      .subscribe();
+
+    // Wrapped because RealtimeClient.connect() re-throws synchronously as
+    // `WebSocket not available: …` when the transport can't be constructed, and
+    // a throw inside an effect propagates to the nearest error boundary — which
+    // would take the whole /portal page down to "Something went wrong." over an
+    // ambient social panel. Chromium happens to fail a CSP-blocked socket via
+    // onerror rather than throwing (measured), so the production CSP bug this
+    // was found alongside degraded instead of crashing; not every engine or
+    // future SDK version has to behave that way, and the poll below is a
+    // perfectly good fallback either way.
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel("team-feed")
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "check_ins" }, scheduleRefresh)
+        .on("postgres_changes", { event: "DELETE", schema: "public", table: "check_ins" }, scheduleRefresh)
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "member_badges" }, scheduleRefresh)
+        .subscribe();
+    } catch {
+      // Poll-only from here. Nothing user-visible: the feed still updates, just
+      // on the interval rather than the instant.
+    }
 
     const poll = setInterval(() => void refresh(), POLL_INTERVAL_MS);
 
     return () => {
       if (timer.current) clearTimeout(timer.current);
       clearInterval(poll);
-      void supabase.removeChannel(channel);
+      if (channel) void supabase.removeChannel(channel);
     };
   }, [scheduleRefresh, refresh]);
 

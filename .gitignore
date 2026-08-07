@@ -52,3 +52,13 @@ supabase/.temp/
 # Internal planning docs — not part of the shipped product
 /docs/
 .env*
+
+# Throwaway probe/driver scripts at the repo root. These get written to poke at
+# staging by hand and routinely hold a test account's real password inline, so a
+# stray `git add -A` puts a credential in a PUBLIC repo — which has already
+# happened once (rtverify.mjs in ade7e15). Anything worth keeping belongs in
+# tests/ or scripts/ with the credential read from the environment.
+/*.mjs
+!next.config.mjs
+!postcss.config.mjs
+!eslint.config.mjs

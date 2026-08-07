@@ -113,7 +113,24 @@ export async function writeCheckIn(
     .select("id")
     .single();
 
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    // Log the real Postgres message, return a human one. This path is reachable
+    // from the member-facing portal, and it showed a member the string
+    // `new row for relation "check_ins" violates check constraint
+    // "check_ins_source_check"` — which tells them nothing they can act on and
+    // leaks the schema. `error.message` here is a database error, never a
+    // validation message: the duplicate case is caught above and returns its own
+    // wording, so anything arriving here is a bug or an unapplied migration.
+    console.error("[writeCheckIn] insert failed:", error.message, {
+      memberId,
+      source,
+      scheduleSlotId,
+    });
+    return {
+      ok: false,
+      error: "Could not record the check-in. Please try again or ask the front desk.",
+    };
+  }
   const checkInId = data?.id as number | undefined;
   if (checkInId && assignments.length > 0) {
     await writeCheckInInstructors(supabase, checkInId, assignments);
