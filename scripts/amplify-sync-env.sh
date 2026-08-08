@@ -28,7 +28,11 @@ KEYS=(
 
 # Vars set to a deploy-specific value rather than the local one
 # (localhost URLs must not reach the hosted build).
-NEXT_PUBLIC_SITE_URL_OVERRIDE="https://${APP_ID}.amplifyapp.com"
+#
+# This must be the live custom domain: publicOrigin() in src/lib/public-origin.ts
+# prefers this over the x-forwarded-host headers, so a stale value here silently
+# overrides the real host in Stripe redirects and password-reset links.
+NEXT_PUBLIC_SITE_URL_OVERRIDE="https://souljiujitsucr.com"
 
 [[ -f "$ENV_FILE" ]] || { echo "error: $ENV_FILE not found" >&2; exit 1; }
 
