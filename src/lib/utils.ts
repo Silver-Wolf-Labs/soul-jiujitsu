@@ -190,11 +190,11 @@ export function getTodayName(): string {
 }
 
 // ── Currency formatting ────────────────────────────────────────────────────
-
-/** Format cents as a dollar string. e.g. 1999 → "$19.99" */
-export function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
+//
+// `formatCents` used to live here and rendered dollars ("$19.99"). Every caller
+// now uses src/lib/currency.ts, which formats colones the way Costa Rica writes
+// them. It is deleted rather than kept as an alias so that no new code can
+// accidentally print a dollar amount.
 
 // ── CSV export ─────────────────────────────────────────────────────────────
 

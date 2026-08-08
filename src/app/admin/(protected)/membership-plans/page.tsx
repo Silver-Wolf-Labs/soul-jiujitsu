@@ -15,6 +15,7 @@ import {
 import { ReorderButtons } from "@/components/ui/ReorderButtons";
 import { HIGHLIGHT_COLOR_KEYS, HIGHLIGHT_BG_CLASS, HIGHLIGHT_TEXT_COLOR, HIGHLIGHT_BORDER_HEX, HIGHLIGHT_LABEL } from "@/lib/pricing-colors";
 import AdminViewTransition from "@/components/admin/AdminViewTransition";
+import { formatColones, formatColonesWithSign, parseColonesToCents } from "@/lib/currency";
 import type { MembershipPlan } from "@/lib/supabase/types";
 import { useOptimisticReorder } from "@/hooks/useOptimisticReorder";
 import ErrorToast from "@/components/admin/ErrorToast";
@@ -22,10 +23,15 @@ import ErrorToast from "@/components/admin/ErrorToast";
 type PlanWithCount = MembershipPlan & { active_member_count: number };
 type BillingInterval = "month" | "year" | "one_time";
 
+/**
+ * Plan price for the admin list. The amount itself goes through
+ * src/lib/currency.ts (colones, dot-grouped); only the interval suffix is local
+ * to this screen.
+ */
 function formatPrice(cents: number, interval: BillingInterval) {
-  const dollars = (cents / 100).toFixed(0);
-  if (interval === "one_time") return `$${dollars} one-time`;
-  return `$${dollars}/${interval === "month" ? "mo" : "yr"}`;
+  const amount = formatColonesWithSign(cents);
+  if (interval === "one_time") return `${amount} one-time`;
+  return `${amount}/${interval === "month" ? "mo" : "yr"}`;
 }
 
 const INTERVAL_LABELS: Record<BillingInterval, string> = {
@@ -39,7 +45,7 @@ const LABEL_PRESETS = ["Most Popular", "Best Value", "Limited Offer", "New"] as 
 const emptyForm = {
   name: "",
   description: "",
-  price_dollars: "",
+  price_colones: "",
   billing_interval: "month" as BillingInterval,
   trial_days: "0",
   max_classes_per_week: "",
@@ -74,6 +80,9 @@ export default function AdminMembershipPlansPage() {
   const [priceSaving, setPriceSaving] = useState(false);
   const [planMembers, setPlanMembers] = useState<{ id: number; member_id: number; member_name: string }[]>([]);
   const [excludedMemberIds, setExcludedMemberIds] = useState<number[]>([]);
+  // Shared by the plan form and the change-price modal — only one is open at a
+  // time, and both reject the same thing (an unparseable colón amount).
+  const [priceError, setPriceError] = useState<string | null>(null);
 
   async function load() {
     const supabase = createClient();
@@ -117,7 +126,7 @@ export default function AdminMembershipPlansPage() {
     setForm({
       name: plan.name,
       description: plan.description ?? "",
-      price_dollars: (plan.price_cents / 100).toFixed(0),
+      price_colones: formatColones(plan.price_cents),
       billing_interval: plan.billing_interval,
       trial_days: String(plan.trial_days),
       max_classes_per_week: plan.max_classes_per_week ? String(plan.max_classes_per_week) : "",
@@ -136,13 +145,22 @@ export default function AdminMembershipPlansPage() {
   }
 
   async function handleSave() {
+    // parseColonesToCents rather than parseFloat: the field accepts the
+    // dot-grouped form the admin sees elsewhere ("40.000"), and parseFloat would
+    // read that as 40. Guarded rather than coerced so a typo can't write NaN.
+    const priceCents = parseColonesToCents(form.price_colones);
+    if (priceCents === null || priceCents < 0) {
+      setPriceError("Enter the price in whole colones, e.g. 35000.");
+      return;
+    }
+    setPriceError(null);
     setSaving(true);
     try {
       const hasColor = !!form.highlight_color;
       const payload = {
         name: form.name.trim(),
         description: form.description.trim() || null,
-        price_cents: Math.round(parseFloat(form.price_dollars) * 100),
+        price_cents: priceCents,
         billing_interval: form.billing_interval,
         trial_days: parseInt(form.trial_days) || 0,
         max_classes_per_week: form.max_classes_per_week ? parseInt(form.max_classes_per_week) : null,
@@ -195,11 +213,17 @@ export default function AdminMembershipPlansPage() {
 
   async function handlePriceChange() {
     if (!priceModalPlan || !newPrice) return;
+    const newPriceCents = parseColonesToCents(newPrice);
+    if (newPriceCents === null || newPriceCents < 0) {
+      setPriceError("Enter the new price in whole colones, e.g. 35000.");
+      return;
+    }
+    setPriceError(null);
     setPriceSaving(true);
     try {
       await changePlanPrice(
         priceModalPlan.id,
-        Math.round(parseFloat(newPrice) * 100),
+        newPriceCents,
         priceScope,
         priceScope === "all_current" ? excludedMemberIds : []
       );
@@ -256,8 +280,11 @@ export default function AdminMembershipPlansPage() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className={labelCls}>Price ($) *</label>
-                  <input type="number" min="0" step="1" {...tf("price_dollars")} className={inputCls} placeholder="189" />
+                  <label className={labelCls}>Price (₡) *</label>
+                  {/* type="text": a number input silently discards the grouping
+                      dot in "40.000" (it isn't a valid number in every locale),
+                      so the admin can't paste a price back in as displayed. */}
+                  <input type="text" inputMode="numeric" {...tf("price_colones")} className={inputCls} placeholder="35000" />
                 </div>
                 <div>
                   <label className={labelCls}>Billing</label>
@@ -454,12 +481,17 @@ export default function AdminMembershipPlansPage() {
           )}
         </div>
 
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-line">
+        <div className="mt-6 pt-4 border-t border-line">
+          {priceError && (
+            <p className="mb-3 text-sm text-danger p-3 bg-danger-light border border-danger-border rounded">{priceError}</p>
+          )}
+          <div className="flex justify-end gap-3">
           <button onClick={() => setView("list")} className="flex-1 sm:flex-none text-sm px-4 py-2 border border-line rounded hover:border-black transition-colors">Cancel</button>
-          <button onClick={handleSave} disabled={saving || !form.name.trim() || !form.price_dollars}
+          <button onClick={handleSave} disabled={saving || !form.name.trim() || !form.price_colones}
             className="flex-1 sm:flex-none text-sm px-4 py-2 bg-black text-white rounded hover:bg-near-black disabled:opacity-50 transition-colors">
             {saving ? "Saving..." : "Save Plan"}
           </button>
+          </div>
         </div>
       </div>
       ) : (
@@ -652,8 +684,8 @@ export default function AdminMembershipPlansPage() {
             </p>
             <div className="space-y-4">
               <div>
-                <label className={labelCls}>New Price ($)</label>
-                <input type="number" min="0" step="1" value={newPrice} onChange={e => setNewPrice(e.target.value)} className={inputCls} placeholder="199" />
+                <label className={labelCls}>New Price (₡)</label>
+                <input type="text" inputMode="numeric" value={newPrice} onChange={e => setNewPrice(e.target.value)} className={inputCls} placeholder="40000" />
               </div>
               <div>
                 <label className={`${labelCls} mb-2`}>Who does this apply to?</label>
@@ -708,6 +740,9 @@ export default function AdminMembershipPlansPage() {
                 </div>
               )}
             </div>
+            {priceError && (
+              <p className="mt-4 text-sm text-danger p-3 bg-danger-light border border-danger-border rounded">{priceError}</p>
+            )}
             <div className="flex justify-end gap-3 mt-6">
               <button onClick={() => setPriceModalPlan(null)} className="flex-1 sm:flex-none text-sm px-4 py-2 border border-line rounded hover:border-black">Cancel</button>
               <button onClick={handlePriceChange} disabled={priceSaving || !newPrice} className="flex-1 sm:flex-none text-sm px-4 py-2 bg-black text-white rounded hover:bg-near-black disabled:opacity-50">

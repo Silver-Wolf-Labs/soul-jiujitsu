@@ -26,7 +26,6 @@
  *   - plan_price_history.changed_by  → set to null
  *
  * NOT touched:
- *   - Stripe customer (delete manually in Stripe Dashboard if needed)
  *
  * Requires SUPABASE_SERVICE_ROLE_KEY in .env.local (admin privileges).
  */
@@ -347,7 +346,6 @@ async function main() {
   console.log("");
   hr();
   console.log("  ✓ Done. User has been fully removed.");
-  console.log("  ⚠ If this user had a Stripe customer, delete it manually in the Stripe Dashboard.");
   hr();
 }
 

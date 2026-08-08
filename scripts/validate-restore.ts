@@ -65,7 +65,11 @@ const INVARIANTS: Invariant[] = [
   { table: "audit_logs",           minCount: 0,   description: "audit trail table exists" },
   { table: "site_settings",        minCount: 1,   description: "gym-wide settings present" },
   { table: "instructors",          minCount: 1,   description: "instructor roster intact" },
-  { table: "stripe_events",        minCount: 0,   description: "webhook idempotency table exists" },
+  // stripe_events is intentionally not checked. The payment integration is gone
+  // and nothing writes to that table any more, but it is still in the schema
+  // (see the DB-columns note in the migration history) — asserting on a table no
+  // feature depends on would just be a restore check that can never fail
+  // meaningfully.
   // New hardening-sprint tables — exist post-migration even if empty.
   { table: "admin_mfa_challenges", minCount: 0,   description: "MFA challenge log table exists" },
   { table: "mfa_recovery_codes",   minCount: 0,   description: "recovery codes table exists" },

@@ -163,7 +163,6 @@ artifact is unaffected.
 | `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` | optional | `profiles.is_admin = true`. Without these the 28-route admin crawl skips |
 | `E2E_KIOSK_PIN` | optional | the kiosk unlock flow skips without it |
 | `E2E_SUPER_ADMIN_PASSWORD` | optional | matches `SUPER_ADMIN_PASSWORD` on the target |
-| `E2E_STRIPE_SECRET_KEY` / `E2E_STRIPE_WEBHOOK_SECRET` | optional | absent keys only disable billing features; the suite accounts for that |
 
 Missing optional secrets are **not** failures. Each suite skips itself and the
 reason appears under "Not checked" in the report, so partial coverage is visible

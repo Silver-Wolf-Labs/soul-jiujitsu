@@ -9,6 +9,8 @@ import { SETTINGS_KEYS } from "@/lib/settings-keys";
 import { gymToday, gymPgDay } from "@/lib/gym-time";
 import { parseUnlockGrace, UNLOCK_GRACE_MS, type KioskUnlockGrace } from "@/lib/kiosk-ui-config";
 import { writeCheckIn, type WriteCheckInResult } from "@/lib/check-in-core";
+import { badgeProgress, type TrackedBadgeState } from "@/lib/badge-progress";
+import type { Badge, EarnedBadge } from "@/lib/supabase/types";
 
 // Re-exported for the kiosk components that already import it from here.
 // Types are erased at compile time, so this doesn't create a server action.
@@ -632,6 +634,111 @@ export async function getGymRankings(memberId: number): Promise<GymRankings> {
     alltime: { rank: Number(r.alltime_rank ?? 1), total: Number(r.alltime_total ?? 0) },
     week:    { rank: Number(r.week_rank    ?? 1), total: Number(r.week_total    ?? 0) },
   };
+}
+
+// ── Kiosk badges ──────────────────────────────────────────────────────────────
+//
+// The kiosk shows badges in their own tab on the profile step rather than on the
+// main card, and it is READ-ONLY there. The kiosk identifies a member from the
+// last four digits of a phone number in front of whoever is standing in line
+// behind them: enough to congratulate somebody, nowhere near enough to change a
+// stored preference. So the tracked badge is displayed and never set from here —
+// picking a goal lives in the portal, behind a real login.
+//
+// Both of these are lazy: the badges tab is a tab the member has to open, and
+// loading 30 catalogue rows plus a progress RPC on every profile view would slow
+// down the check-in that is the whole reason the tablet exists.
+
+/** A member's badges as the kiosk renders them: the wall, grouped by nothing. */
+export interface KioskBadges {
+  earned: EarnedBadge[];
+  locked: Badge[];
+}
+
+const KIOSK_BADGE_FIELDS =
+  "id, slug, name, description, icon, tier, category, xp_reward, secret, active, sort_order";
+
+/**
+ * The badge wall for the kiosk's badges tab.
+ *
+ * Same secret-badge rule as the portal's getOwnBadges: a secret badge is only
+ * ever shown once it has been earned. This surface makes that stricter than a
+ * preference — the kiosk screen is visible to the whole room, so a spoiler here
+ * is a spoiler for everybody, not just the member.
+ */
+export async function getKioskMemberBadges(memberId: number): Promise<KioskBadges> {
+  await requireKioskSession();
+  const supabase = kioskClient();
+
+  const [catalogueResult, earnedResult] = await Promise.all([
+    supabase.from("badges").select(KIOSK_BADGE_FIELDS).eq("active", true).order("sort_order"),
+    supabase
+      .from("member_badges")
+      .select(`awarded_via, awarded_at, note, seen_at, badges (${KIOSK_BADGE_FIELDS})`)
+      .eq("member_id", memberId)
+      .order("awarded_at", { ascending: false }),
+  ]);
+
+  if (catalogueResult.error) throw new Error(catalogueResult.error.message);
+  if (earnedResult.error) throw new Error(earnedResult.error.message);
+
+  const earned: EarnedBadge[] = (earnedResult.data ?? [])
+    // A deactivated badge still counts as earned but joins to null — drop those
+    // rather than render an empty medal.
+    .filter((row) => row.badges)
+    .map((row) => ({
+      badge:       row.badges as unknown as Badge,
+      awarded_via: row.awarded_via as "auto" | "manual",
+      awarded_at:  row.awarded_at as string,
+      note:        (row.note as string | null) ?? null,
+      seen_at:     (row.seen_at as string | null) ?? null,
+    }));
+
+  const earnedIds = new Set(earned.map((e) => e.badge.id));
+  const locked = ((catalogueResult.data ?? []) as unknown as Badge[])
+    .filter((b) => !earnedIds.has(b.id) && !b.secret);
+
+  return { earned, locked };
+}
+
+/**
+ * The member's chosen objective and how far along it is, for the kiosk tab.
+ *
+ * Reads the same member_badge_progress RPC the portal does, so the bar on the
+ * tablet and the bar on the member's phone cannot disagree.
+ *
+ * Never throws: a member with no goal, a pre-migration database and a failed RPC
+ * all resolve to something renderable. This is a lazily-loaded tab on a kiosk that
+ * must not break the check-in flow — the primary path — over a decoration.
+ */
+export async function getKioskTrackedBadge(memberId: number): Promise<TrackedBadgeState> {
+  await requireKioskSession();
+  const supabase = kioskClient();
+
+  try {
+    const { data: row, error } = await supabase
+      .from("members")
+      .select(`tracked_badge_id, badges!members_tracked_badge_id_fkey (${KIOSK_BADGE_FIELDS})`)
+      .eq("id", memberId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+
+    const badge = (row?.badges as unknown as Badge | null) ?? null;
+    if (!badge) return { badge: null, progress: { kind: "manual" } };
+
+    const today = await gymToday();
+    const { data: progressRows, error: progressError } = await supabase.rpc("member_badge_progress", {
+      p_member_id: memberId,
+      p_badge_id: badge.id,
+      p_today: today,
+    });
+    if (progressError) throw new Error(progressError.message);
+
+    return { badge, progress: badgeProgress(progressRows?.[0] ?? null) };
+  } catch (e) {
+    console.warn("[getKioskTrackedBadge] falling back to no goal:", e);
+    return { badge: null, progress: { kind: "manual" } };
+  }
 }
 
 // ── Admin-initiated check-in ──────────────────────────────────────────────────

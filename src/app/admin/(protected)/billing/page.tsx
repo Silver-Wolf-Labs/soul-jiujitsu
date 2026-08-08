@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { formatColonesWithSign } from "@/lib/currency";
 import type { MembershipStatus } from "@/lib/supabase/types";
 import Spinner from "@/components/ui/Spinner";
 import Pagination from "@/components/admin/Pagination";
@@ -124,7 +125,7 @@ export default function AdminBillingPage() {
   }
 
   function effectivePrice(row: BillingRow) {
-    return `$${(row.effective_price_cents / 100).toFixed(0)}`;
+    return formatColonesWithSign(row.effective_price_cents);
   }
 
   function cardClass(active: boolean, highlight = "") {
@@ -163,11 +164,16 @@ export default function AdminBillingPage() {
 
         {/* Estimated monthly revenue */}
         <div className="border border-line rounded-lg p-4 bg-white">
+          {/* Was `$…toLocaleString()`, which grouped with commas (en-US) no
+              matter the amount. The sum stays in cents and goes through the
+              shared formatter so it groups with dots like every other price. */}
           <div className="text-2xl font-bold text-ink">
-            ${Math.round(rows.filter(r => r.status === "active").reduce((sum, r) => {
-              const monthly = r.plan_billing_interval === "year" ? r.effective_price_cents / 12 : r.effective_price_cents;
-              return sum + monthly;
-            }, 0) / 100).toLocaleString()}
+            {formatColonesWithSign(
+              rows.filter(r => r.status === "active").reduce((sum, r) => {
+                const monthly = r.plan_billing_interval === "year" ? r.effective_price_cents / 12 : r.effective_price_cents;
+                return sum + monthly;
+              }, 0)
+            )}
           </div>
           <div className="text-xs text-muted mt-1">Est. Monthly Revenue</div>
         </div>
@@ -256,7 +262,11 @@ export default function AdminBillingPage() {
                       <SortableHeader label="Plan" sortKey="plan_name" currentSortKey={sortKey} currentSortDir={sortDir} onSort={toggleSort} />
                       <SortableHeader label="Status" sortKey="status" currentSortKey={sortKey} currentSortDir={sortDir} onSort={toggleSort} />
                       <SortableHeader label="Price" sortKey="effective_price_cents" currentSortKey={sortKey} currentSortDir={sortDir} onSort={toggleSort} />
-                      <th className="text-left px-4 py-3 hidden lg:table-cell">Payment Method</th>
+                      {/* Was "Payment Method", which rendered an em dash on every
+                          row: card details were never populated, and now never
+                          will be — payment is collected in person. The billing
+                          interval is something this table actually knows. */}
+                      <th className="text-left px-4 py-3 hidden lg:table-cell">Billing</th>
                       <SortableHeader label="Started" sortKey="started_at" currentSortKey={sortKey} currentSortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell" />
                       <th className="text-right px-4 py-3">Actions</th>
                     </tr>
@@ -284,7 +294,9 @@ export default function AdminBillingPage() {
                             <span className="ml-1 text-xs text-yellow-dark border border-yellow-border bg-yellow-light rounded px-1">override</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 hidden lg:table-cell text-muted text-xs italic">—</td>
+                        <td className="px-4 py-3 hidden lg:table-cell text-muted text-xs">
+                          {row.plan_billing_interval === "year" ? "Yearly" : row.plan_billing_interval === "one_time" ? "One-time" : "Monthly"}
+                        </td>
                         <td className="px-4 py-3 hidden lg:table-cell text-muted text-xs">
                           {new Date(row.started_at).toLocaleDateString()}
                         </td>

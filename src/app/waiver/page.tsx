@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { createClient } from "@/lib/supabase/server";
 import { getGymProfile } from "@/lib/gym-profile";
 import { substituteWaiverPlaceholders } from "@/lib/waiver-substitute";
@@ -32,14 +33,17 @@ export default async function WaiverPage() {
     redirect("/portal");
   }
 
-  // Fetch the active waiver template and gym profile
-  const [{ data: template }, profile] = await Promise.all([
+  // Fetch the active waiver template and gym profile.
+  // getTranslations, not useTranslations: this is an async server component and
+  // hooks can't run here — same split as portal/page.tsx.
+  const [{ data: template }, profile, t] = await Promise.all([
     supabase
       .from("waiver_templates")
       .select("*")
       .eq("active", true)
       .single(),
     getGymProfile(),
+    getTranslations("waiver"),
   ]);
 
   return (
@@ -50,7 +54,7 @@ export default async function WaiverPage() {
           <div className="font-display text-3xl text-black mb-1">
             {profile.logoText} <span className="text-yellow">{profile.logoDot}</span> {profile.cityName}
           </div>
-          <p className="text-sm text-muted">Member Portal</p>
+          <p className="text-sm text-muted">{t("subtitle")}</p>
         </div>
 
         {/* Returning-user context card.
@@ -60,25 +64,31 @@ export default async function WaiverPage() {
             to get out. The sign-out link is the escape hatch. */}
         <div className="mb-4 bg-white border border-line rounded-lg px-5 py-4 flex items-center justify-between gap-4">
           <div className="min-w-0">
+            {/* t.rich, not interpolation: the name keeps its bold span, and in
+                Spanish the greeting reads "Hola de nuevo, X" — the placeholder
+                sits at a different point in the sentence than in English. */}
             <p className="text-sm text-ink">
-              Welcome back, <span className="font-semibold">{member.first_name}</span>.
+              {t.rich("welcomeBack", {
+                firstName: member.first_name,
+                name: (chunks) => <span className="font-semibold">{chunks}</span>,
+              })}
             </p>
-            <p className="text-xs text-muted mt-0.5">
-              Your account is ready — just sign the waiver below to finish.
-            </p>
+            <p className="text-xs text-muted mt-0.5">{t("accountReady")}</p>
           </div>
           <WaiverSignOutLink />
         </div>
 
         {!template ? (
           <div className="bg-white border border-line rounded-lg p-8 text-center">
-            <p className="text-ink">No waiver available. Please contact the gym.</p>
+            <p className="text-ink">{t("noTemplate")}</p>
           </div>
         ) : (
           <div className="bg-white border border-line rounded-lg overflow-hidden shadow-sm">
             <div className="px-6 py-5 border-b border-line">
               <h1 className="font-display text-2xl text-black">{template.title}</h1>
-              <p className="text-xs text-muted mt-1">Version {template.version} &mdash; Please read the full document below before signing.</p>
+              {/* The title is admin-authored and renders as stored; only the
+                  version line is system copy. */}
+              <p className="text-xs text-muted mt-1">{t("versionNote", { version: template.version })}</p>
             </div>
 
             {/* WaiverSignButton owns the scrollable body so the agreement

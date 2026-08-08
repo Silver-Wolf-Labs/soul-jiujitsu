@@ -1,83 +1,49 @@
 "use server";
 
 /**
- * Authenticated billing server actions.
+ * Membership self-service server actions for the member portal.
  *
- * Only functions that require user authentication belong here.
- * Pure Stripe helpers (customer, price, checkout, etc.) live in src/lib/stripe.ts
- * and are NOT exposed as callable server actions.
+ * Historically this file wrapped a payment processor (hosted billing portal,
+ * subscription cancellation with proration). Soul Jiu-Jitsu takes payment in
+ * person, so there is no processor to call: what remains is the local
+ * membership record, and cancelling is a bookkeeping write plus an audit entry.
  */
 
 import { getTranslations } from "next-intl/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { getStripe, getOrigin, getPeriodEnd, CANCELLATION_NOTICE_DAYS } from "@/lib/stripe";
 import { logAuditEvent } from "@/lib/audit";
 
 /**
  * Member-facing error copy, from the portal catalogue.
  *
- * Both actions in this file are called only from the member portal (verified by
- * grep: the profile page's Payment tab and CurrentPlanCard), so every `error`
- * string here is read by a Spanish-speaking member. getTranslations rather than
- * the hook because a "use server" module can't call hooks.
+ * The action in this file is called only from the member portal (CurrentPlanCard),
+ * so every `error` string here is read by a Spanish-speaking member.
+ * getTranslations rather than the hook because a "use server" module can't call
+ * hooks.
  */
 async function errors() {
   return getTranslations("portal.errors");
 }
 
-// ── Billing Portal ───────────────────────────────────────────────────────────
+// ── Cancellation ────────────────────────────────────────────────────────────
 
 /**
- * Create a Stripe Billing Portal session for member self-service.
- * Members can update their card, view invoices, and cancel.
- */
-export async function createBillingPortalSession(): Promise<
-  { url: string } | { error: string }
-> {
-  const t = await errors();
-  const supabase = createClient();
-  const { data: userData, error: authError } = await supabase.auth.getUser();
-  if (authError || !userData.user) return { error: t("notAuthenticated") };
-
-  const { data: member } = await supabase
-    .from("members")
-    .select("stripe_customer_id")
-    .eq("user_id", userData.user.id)
-    .single();
-
-  if (!member?.stripe_customer_id) {
-    return { error: t("noBillingAccount") };
-  }
-
-  try {
-    const stripe = getStripe();
-    const session = await stripe.billingPortal.sessions.create({
-      customer: member.stripe_customer_id,
-      return_url: `${getOrigin()}/portal/profile`,
-    });
-
-    return { url: session.url };
-  } catch (err) {
-    console.error("[createBillingPortalSession] Stripe API error:", err);
-    return { error: t("billingPortalUnavailable") };
-  }
-}
-
-// ── Cancellation with 10-day notice policy ──────────────────────────────────
-
-/**
- * Cancel a membership with the 10-day notice policy.
+ * Cancel the caller's own membership, effective immediately.
  *
- * - If >= 10 days before next billing: cancel at current period end (no extra charge)
- * - If < 10 days before next billing: member gets charged once more,
- *   subscription cancels at the end of the NEXT period
+ * No notice period and no "you'll be charged once more" branch: those existed
+ * because a card was on file and a subscription had to be wound down against a
+ * billing cycle. Nothing here charges anyone. If the member has already paid
+ * the profe for the current month, honouring the remainder is a conversation at
+ * the gym — deliberately not modelled as an automated end-of-period date this
+ * code would have to guess.
  *
- * No refunds in either case.
+ * Returns `cancelAt` (always now) so the portal can render the same
+ * confirmation shape it always did.
  */
 export async function requestCancellation(
   membershipId: number
-): Promise<{ cancelAt: string; chargedAgain: boolean } | { error: string }> {
+): Promise<{ cancelAt: string } | { error: string }> {
   const t = await errors();
   const supabase = createClient();
   const { data: userData, error: authError } = await supabase.auth.getUser();
@@ -94,7 +60,7 @@ export async function requestCancellation(
   const adminSupabase = createServiceClient();
   const { data: membership } = await adminSupabase
     .from("member_memberships")
-    .select("id, member_id, stripe_subscription_id, is_comp, status")
+    .select("id, member_id, is_comp, status")
     .eq("id", membershipId)
     .eq("member_id", member.id)
     .single();
@@ -102,71 +68,23 @@ export async function requestCancellation(
   if (!membership) return { error: t("membershipNotFound") };
   if (membership.status === "canceled") return { error: t("alreadyCanceled") };
 
-  // Comp memberships: cancel immediately, no Stripe involved
-  if (membership.is_comp || !membership.stripe_subscription_id) {
-    await adminSupabase
-      .from("member_memberships")
-      .update({ status: "canceled", canceled_at: new Date().toISOString() })
-      .eq("id", membershipId);
+  const canceledAt = new Date().toISOString();
 
-    await logAuditEvent("UPDATE", "member_memberships", String(membershipId), {
-      after: { status: "canceled" },
-      source: "self_cancellation",
-      is_comp: true,
-    });
-
-    return { cancelAt: new Date().toISOString(), chargedAgain: false };
-  }
-
-  // Stripe subscription: apply 10-day notice policy
-  const stripe = getStripe();
-  const subscription = await stripe.subscriptions.retrieve(
-    membership.stripe_subscription_id
-  );
-
-  const now = Date.now();
-  const periodEndSec = getPeriodEnd(subscription);
-  const periodEndMs = periodEndSec * 1000;
-  const daysUntilRenewal = (periodEndMs - now) / (1000 * 60 * 60 * 24);
-
-  let cancelAt: Date;
-  let chargedAgain = false;
-
-  if (daysUntilRenewal >= CANCELLATION_NOTICE_DAYS) {
-    // Enough notice: cancel at current period end
-    await stripe.subscriptions.update(membership.stripe_subscription_id, {
-      cancel_at_period_end: true,
-    });
-    cancelAt = new Date(periodEndMs);
-  } else {
-    // Not enough notice: charge once more, cancel at end of NEXT period
-    const interval = subscription.items.data[0]?.price?.recurring?.interval;
-    const nextPeriodEnd = new Date(periodEndMs);
-    if (interval === "year") {
-      nextPeriodEnd.setFullYear(nextPeriodEnd.getFullYear() + 1);
-    } else {
-      nextPeriodEnd.setMonth(nextPeriodEnd.getMonth() + 1);
-    }
-
-    await stripe.subscriptions.update(membership.stripe_subscription_id, {
-      cancel_at: Math.floor(nextPeriodEnd.getTime() / 1000),
-    });
-    cancelAt = nextPeriodEnd;
-    chargedAgain = true;
-  }
-
-  // Update local record
-  await adminSupabase
+  const { error } = await adminSupabase
     .from("member_memberships")
-    .update({ ends_at: cancelAt.toISOString() })
+    .update({ status: "canceled", canceled_at: canceledAt })
     .eq("id", membershipId);
 
+  if (error) {
+    console.error("[requestCancellation] update failed:", error.message);
+    return { error: t("generic") };
+  }
+
   await logAuditEvent("UPDATE", "member_memberships", String(membershipId), {
-    after: { ends_at: cancelAt.toISOString() },
+    after: { status: "canceled" },
     source: "self_cancellation",
-    days_notice: Math.floor(daysUntilRenewal),
-    charged_again: chargedAgain,
+    is_comp: !!membership.is_comp,
   });
 
-  return { cancelAt: cancelAt.toISOString(), chargedAgain };
+  return { cancelAt: canceledAt };
 }

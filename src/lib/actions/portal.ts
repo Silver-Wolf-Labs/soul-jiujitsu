@@ -1,9 +1,13 @@
 "use server";
 
 import { getTranslations } from "next-intl/server";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { logAuditEvent } from "@/lib/audit";
+import { leaderboardOptOutSchema } from "@/lib/validations/leaderboard";
+import { trackedBadgeSchema } from "@/lib/validations/badge-tracker";
+import { badgeProgress, type TrackedBadgeState } from "@/lib/badge-progress";
 import { gymToday, gymPgDay } from "@/lib/gym-time";
 import { writeCheckIn, type AwardedBadge } from "@/lib/check-in-core";
 import type { KioskMemberStats, GymRankings } from "@/lib/actions/check-ins";
@@ -16,7 +20,6 @@ import type {
   TeamMemberEntry,
   TeamActivityEntry,
 } from "@/lib/supabase/types";
-import { findOrCreateStripeCustomer, createCheckoutSession } from "@/lib/stripe";
 
 /**
  * Portal-facing error copy.
@@ -26,10 +29,10 @@ import { findOrCreateStripeCustomer, createCheckoutSession } from "@/lib/stripe"
  * getTranslations rather than a literal because a "use server" module can't call
  * the React hook — this is the server-side equivalent.
  *
- * Only for messages a member READS. A raw `error.message` from Postgres or
- * Stripe is a developer artefact: it gets logged and replaced with `generic`
- * rather than translated, both because it leaks schema and because there is no
- * finite set of strings to translate.
+ * Only for messages a member READS. A raw `error.message` from Postgres is a
+ * developer artefact: it gets logged and replaced with `generic` rather than
+ * translated, both because it leaks schema and because there is no finite set of
+ * strings to translate.
  */
 async function errors() {
   return getTranslations("portal.errors");
@@ -94,15 +97,21 @@ export async function updateOwnEmergencyContact(data: {
 }
 
 /**
- * Self-enrollment flow:
- * - Plans with trial_days > 0: Create membership locally (no card, no Stripe).
- *   Returns { success: true }.
- * - Plans with no trial: Redirect to Stripe Checkout for payment.
- *   Returns { checkoutUrl: string }.
+ * Self-enrollment — trial plans only.
+ *
+ * A trial costs nothing, so a member can start one themselves and the system is
+ * telling the truth when it marks them `trialing`. A paid plan is the opposite:
+ * money changes hands in person with the profe, and this code has no way to know
+ * whether that happened. Letting the portal write `active` on request would
+ * manufacture a paid membership out of a button press, so paid plans are
+ * rejected here and the portal points the member at the gym instead.
+ *
+ * The check is server-side rather than only in the UI because a server action is
+ * a public endpoint — hiding the button would not stop a crafted call.
  */
 export async function selfEnrollInPlan(
   plan_id: number
-): Promise<{ success: true } | { checkoutUrl: string } | { error: string }> {
+): Promise<{ success: true } | { error: string }> {
   const t = await errors();
   const supabase = createClient();
   const { data: userData, error: authError } = await supabase.auth.getUser();
@@ -127,80 +136,54 @@ export async function selfEnrollInPlan(
 
   const { data: plan } = await supabase
     .from("membership_plans")
-    .select("price_cents, name, billing_interval, status, visible, trial_days, stripe_product_id, stripe_default_price_id")
+    .select("price_cents, name, billing_interval, status, visible, trial_days")
     .eq("id", plan_id)
     .single();
   if (!plan) return { error: t("planNotFound") };
   if (plan.status !== "active" || !plan.visible) return { error: t("planUnavailable") };
   if (plan.billing_interval === "one_time") return { error: t("dropInNotMembership") };
 
+  // Paid plans are arranged with the profe at the gym — see the doc comment.
+  if (plan.trial_days <= 0) return { error: t("paidPlanInPerson") };
+
   const adminSupabase = createServiceClient();
 
-  // ── Trial path: no card, no commitment ──────────────────────────────────
-  if (plan.trial_days > 0) {
-    const { data: rpcData, error: rpcError } = await adminSupabase.rpc(
-      "enroll_trial_membership_tx",
-      {
-        p_member_id: member.id,
-        p_plan_id: plan_id,
-        p_locked_price_cents: plan.price_cents,
-        p_plan_name: plan.name,
-        p_plan_billing_interval: plan.billing_interval,
-      }
-    );
-    if (rpcError) {
-      console.error("[selfEnrollInPlan] enroll_trial_membership_tx failed:", rpcError.message);
-      return { error: t("generic") };
+  const { data: rpcData, error: rpcError } = await adminSupabase.rpc(
+    "enroll_trial_membership_tx",
+    {
+      p_member_id: member.id,
+      p_plan_id: plan_id,
+      p_locked_price_cents: plan.price_cents,
+      p_plan_name: plan.name,
+      p_plan_billing_interval: plan.billing_interval,
     }
-    if (rpcData?.error === "already_enrolled") {
-      return { error: t("alreadyEnrolled") };
-    }
-    // The RPC only ever returns 'already_enrolled' (handled above), so anything
-    // else is a snake_case code from a future migration — logged and shown as
-    // the catch-all rather than rendered raw, which would put an identifier
-    // like "some_new_code" in front of a member.
-    if (rpcData?.error) {
-      console.error("[selfEnrollInPlan] unrecognised RPC error code:", rpcData.error);
-      return { error: t("generic") };
-    }
-
-    await logAuditEvent("CREATE", "member_memberships", String(rpcData.membership_id), {
-      member_id: member.id,
-      plan_id,
-      locked_price_cents: plan.price_cents,
-      plan_name: plan.name,
-      source: "self_enrollment_trial",
-      trial_days: plan.trial_days,
-    });
-
-    return { success: true };
+  );
+  if (rpcError) {
+    console.error("[selfEnrollInPlan] enroll_trial_membership_tx failed:", rpcError.message);
+    return { error: t("generic") };
+  }
+  if (rpcData?.error === "already_enrolled") {
+    return { error: t("alreadyEnrolled") };
+  }
+  // The RPC only ever returns 'already_enrolled' (handled above), so anything
+  // else is a snake_case code from a future migration — logged and shown as
+  // the catch-all rather than rendered raw, which would put an identifier
+  // like "some_new_code" in front of a member.
+  if (rpcData?.error) {
+    console.error("[selfEnrollInPlan] unrecognised RPC error code:", rpcData.error);
+    return { error: t("generic") };
   }
 
-  // ── Paid path: redirect to Stripe Checkout ──────────────────────────────
-  if (!plan.stripe_product_id || !plan.stripe_default_price_id) {
-    return { error: t("planNotConfigured") };
-  }
+  await logAuditEvent("CREATE", "member_memberships", String(rpcData.membership_id), {
+    member_id: member.id,
+    plan_id,
+    locked_price_cents: plan.price_cents,
+    plan_name: plan.name,
+    source: "self_enrollment_trial",
+    trial_days: plan.trial_days,
+  });
 
-  try {
-    const customerId = await findOrCreateStripeCustomer(
-      member.id,
-      member.email,
-      `${member.first_name} ${member.last_name}`
-    );
-
-    const checkoutUrl = await createCheckoutSession({
-      memberId: member.id,
-      planId: plan_id,
-      customerId,
-      mode: "subscription",
-      priceId: plan.stripe_default_price_id,
-    });
-
-    return { checkoutUrl };
-  } catch (err) {
-    console.error("[selfEnrollInPlan] Stripe checkout creation failed:", err);
-    return { error: t("paymentUnavailable") };
-  }
+  return { success: true };
 }
 
 // NOTE: belt, stripes, and belt_awarded_at are managed by admins only.
@@ -447,6 +430,17 @@ export async function getOwnGamification(): Promise<MemberGamification> {
 }
 
 /**
+ * The catalogue columns the portal renders, i.e. the `Badge` interface.
+ *
+ * Hoisted to module scope now that three actions here select it (the wall, the
+ * tracker, and the tracker's picker) — an explicit list rather than `*` so the
+ * rule_* columns stay server-side. They are the profe's tuning knobs, not
+ * something to ship to every member's browser, and `Badge` has no fields for them.
+ */
+const BADGE_FIELDS =
+  "id, slug, name, description, icon, tier, category, xp_reward, secret, active, sort_order";
+
+/**
  * Returns the badge catalogue plus which of them the member has earned.
  *
  * Unearned badges are returned too: showing them as locked silhouettes is the
@@ -456,8 +450,6 @@ export async function getOwnGamification(): Promise<MemberGamification> {
 export async function getOwnBadges(): Promise<{ earned: EarnedBadge[]; locked: Badge[] }> {
   const member = await resolveOwnMember();
   const service = createServiceClient();
-
-  const BADGE_FIELDS = "id, slug, name, description, icon, tier, category, xp_reward, secret, active, sort_order";
 
   const [catalogueResult, earnedResult] = await Promise.all([
     service.from("badges").select(BADGE_FIELDS).eq("active", true).order("sort_order"),
@@ -748,4 +740,265 @@ export async function getTeamActivity(limit = 30, days = 14): Promise<TeamActivi
   });
   if (error) throw new Error(error.message);
   return (data ?? []) as TeamActivityEntry[];
+}
+
+// ── Leaderboard opt-out ──────────────────────────────────────────────────────
+//
+// A member can take themselves off the ranking without asking staff. The flag
+// lives on `members.leaderboard_opt_out` and the exclusion is enforced inside
+// get_team_leaderboard (20260812000000_leaderboard_opt_out.sql), not here — the
+// RPC is the only thing that decides what one member may see of another, and
+// filtering in app code would leave the raw RPC still returning the hidden rows
+// to anyone who called it directly with the publishable key.
+//
+// The flag is NOT on the leaderboard projection. TeamMemberEntry mirrors the
+// RPC's column set, so adding a column would change the shape every caller
+// destructures; and a per-row "this person is hidden" field is the opposite of
+// the point — it would publish exactly the fact the member is trying to withhold.
+// The viewer's own state is read separately instead.
+
+/**
+ * Whether the authenticated member is currently hiding from the ranking.
+ *
+ * Reads through the service client behind resolveOwnMember's ownership check,
+ * matching every other own-data read here. The session client would work too
+ * (`member_read_own` covers it) but the pattern in this file is one lookup to
+ * resolve the member, then service reads scoped by that id.
+ */
+export async function getOwnLeaderboardOptOut(): Promise<boolean> {
+  const member = await resolveOwnMember();
+  const service = createServiceClient();
+
+  const { data, error } = await service
+    .from("members")
+    .select("leaderboard_opt_out")
+    .eq("id", member.id)
+    .single();
+
+  if (error) throw new Error(error.message);
+  // Defaults to visible. A deploy that lands this code before the migration
+  // returns undefined here, and "on the board" is the pre-existing behaviour —
+  // failing closed would hide the whole gym from itself over a missing column.
+  return data?.leaderboard_opt_out === true;
+}
+
+/**
+ * Sets the authenticated member's ranking visibility.
+ *
+ * Takes the desired state rather than flipping, so a double-tap on a slow
+ * connection is idempotent instead of a silent no-op. Returns the state that is
+ * now stored, which is what the client renders — a toggle that reports back what
+ * it actually did can't drift from the database on a failed write.
+ *
+ * The member id comes from the session; there is no parameter for it and no code
+ * path that writes another member's row. `.eq("user_id", …)` is what enforces
+ * that on the service client, which bypasses RLS — the same shape as
+ * updateOwnProfile above, and the reason it matters more here is that this write
+ * is on a column the member IS allowed to change, so a wrong id would succeed.
+ */
+export async function setOwnLeaderboardOptOut(
+  optOut: boolean
+): Promise<{ success: true; optOut: boolean } | { error: string }> {
+  const t = await errors();
+  const parsed = leaderboardOptOutSchema.safeParse({ opt_out: optOut });
+  if (!parsed.success) return { error: t("generic") };
+
+  const supabase = createClient();
+  const { data: userData, error: authError } = await supabase.auth.getUser();
+  if (authError || !userData.user) return { error: t("notAuthenticated") };
+
+  const service = createServiceClient();
+  const { data, error } = await service
+    .from("members")
+    .update({ leaderboard_opt_out: parsed.data.opt_out })
+    .eq("user_id", userData.user.id)
+    .select("id, leaderboard_opt_out")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[setOwnLeaderboardOptOut] update failed:", error.message);
+    return { error: t("generic") };
+  }
+  // No row updated: the session is valid but not linked to a member (an
+  // admin-only account). Distinguished from a write error because the copy is
+  // different and neither is the generic message.
+  if (!data) return { error: t("memberNotFound") };
+
+  // Audited: it changes what other members can see, so "when did I disappear
+  // from the board" has an answer that isn't guesswork. TOGGLE with
+  // { field, from, to } is the shape every other boolean flip in actions/ logs;
+  // `source` marks it as the member's own doing rather than an admin's, the same
+  // distinction selfCheckIn records.
+  const stored = data.leaderboard_opt_out === true;
+  await logAuditEvent("TOGGLE", "members", data.id, {
+    field: "leaderboard_opt_out",
+    from: !stored,
+    to: stored,
+    source: "member-self-service",
+  });
+
+  // The board is server-rendered into /portal, so the next navigation there must
+  // not serve a cached page built from the old flag. TeamFeed also refetches on
+  // its own after the toggle, which covers the current view; this covers the
+  // member coming back to the page later.
+  revalidatePath("/portal");
+
+  return { success: true, optOut: stored };
+}
+
+// ── Badge tracker ────────────────────────────────────────────────────────────
+//
+// One chosen badge, with a progress bar under it. The badge wall already shows
+// every unearned badge; what it can't show is how CLOSE you are to any of them,
+// because the rules live in the row and only SQL evaluates them.
+//
+// The counters come from member_badge_progress (20260814000000), which is also
+// what member_qualifies_for_badge is now defined in terms of. That indirection is
+// the point: a bar that reads 50/50 next to a badge that was never awarded is the
+// bug this feature would otherwise ship with, and it is impossible when the bar
+// and the award read the same function.
+
+/**
+ * The badge the authenticated member is chasing, plus its progress.
+ *
+ * Returns `{ badge: null }` rather than throwing when there is no objective —
+ * that's the empty state, and it is also what a database that hasn't run
+ * 20260813000000 yet looks like. A missing column must not take down a portal
+ * page that renders fine without a tracker, which is the same reasoning
+ * getOwnLeaderboardOptOut documents.
+ */
+export async function getOwnTrackedBadge(): Promise<TrackedBadgeState> {
+  const member = await resolveOwnMember();
+  const service = createServiceClient();
+
+  const { data: row, error } = await service
+    .from("members")
+    .select(`tracked_badge_id, badges!members_tracked_badge_id_fkey (${BADGE_FIELDS})`)
+    .eq("id", member.id)
+    .maybeSingle();
+
+  // Includes "column does not exist" on a pre-migration database.
+  if (error) throw new Error(error.message);
+
+  const badge = (row?.badges as unknown as Badge | null) ?? null;
+  if (!badge) return { badge: null, progress: { kind: "manual" } };
+
+  const today = await gymToday();
+  const { data: progressRows, error: progressError } = await service.rpc(
+    "member_badge_progress",
+    { p_member_id: member.id, p_badge_id: badge.id, p_today: today }
+  );
+
+  // A progress RPC failure loses the bar, not the goal: the member still sees
+  // which badge they picked, which is most of the value. `indeterminate` is the
+  // shape the UI already renders for "no number available".
+  if (progressError) {
+    console.error("[getOwnTrackedBadge] progress RPC failed:", progressError.message);
+    return { badge, progress: { kind: "indeterminate", ruleKind: null } };
+  }
+
+  return { badge, progress: badgeProgress(progressRows?.[0] ?? null) };
+}
+
+/**
+ * Badges the member may pick as an objective.
+ *
+ * Three exclusions, and each has its own reason:
+ *
+ *   • already earned — there is nothing left to track, and the award trigger
+ *     clears the objective anyway (20260813000000), so offering it would produce
+ *     a goal that erases itself.
+ *   • secret — the badge exists to be a surprise. Listing it in a picker spoils
+ *     it more thoroughly than the locked grid ever could, since the picker shows
+ *     the name and description.
+ *   • manual-only (rule_kind IS NULL) — the profe awards "primera sumisión" by
+ *     hand when he sees it. There is no rule, so there is no progress, so a
+ *     tracker pointed at it is a card that can never move. Members can still see
+ *     these on the wall; they just aren't goals the app can follow.
+ *
+ * The rule_kind filter runs in the query rather than on the returned rows because
+ * BADGE_FIELDS deliberately doesn't include rule_kind — see its comment.
+ */
+export async function getTrackableBadges(): Promise<Badge[]> {
+  const member = await resolveOwnMember();
+  const service = createServiceClient();
+
+  const [catalogueResult, earnedResult] = await Promise.all([
+    service
+      .from("badges")
+      .select(BADGE_FIELDS)
+      .eq("active", true)
+      .eq("secret", false)
+      .not("rule_kind", "is", null)
+      .order("sort_order"),
+    service.from("member_badges").select("badge_id").eq("member_id", member.id),
+  ]);
+
+  if (catalogueResult.error) throw new Error(catalogueResult.error.message);
+  if (earnedResult.error) throw new Error(earnedResult.error.message);
+
+  const earnedIds = new Set((earnedResult.data ?? []).map((r) => r.badge_id as number));
+  return ((catalogueResult.data ?? []) as unknown as Badge[]).filter((b) => !earnedIds.has(b.id));
+}
+
+/**
+ * Sets or clears the authenticated member's objective. `null` clears it.
+ *
+ * Only the member themselves: there is no member-id parameter, and the write is
+ * scoped by `user_id` from the session — the same shape as setOwnLeaderboardOptOut,
+ * and it matters for the same reason. This is a column the member IS allowed to
+ * change, so the service client (which bypasses RLS) writing the wrong row would
+ * succeed silently.
+ *
+ * Eligibility is re-checked here rather than trusted from the picker, because a
+ * server action is a public endpoint and the picker is just a UI. The two checks
+ * that are security rather than UX — secret and inactive — are enforced a third
+ * time by trg_enforce_tracked_badge_eligible, since `members` has an UPDATE policy
+ * for a member's own row and this action is not the only door.
+ *
+ * Not audited, deliberately. logAuditEvent exists for changes somebody might later
+ * need to account for — what another member can see, what a membership costs. Which
+ * badge you feel like chasing this month is nobody's business but yours, and
+ * writing it to an audit trail an admin reads would make a private choice
+ * reviewable.
+ */
+export async function setOwnTrackedBadge(
+  badgeId: number | null
+): Promise<{ success: true; badgeId: number | null } | { error: string }> {
+  const t = await errors();
+  const parsed = trackedBadgeSchema.safeParse({ badge_id: badgeId });
+  if (!parsed.success) return { error: t("generic") };
+
+  const supabase = createClient();
+  const { data: userData, error: authError } = await supabase.auth.getUser();
+  if (authError || !userData.user) return { error: t("notAuthenticated") };
+
+  const service = createServiceClient();
+  const target = parsed.data.badge_id;
+
+  if (target !== null) {
+    const eligible = await getTrackableBadges();
+    if (!eligible.some((b) => b.id === target)) return { error: t("badgeNotTrackable") };
+  }
+
+  const { data, error } = await service
+    .from("members")
+    .update({ tracked_badge_id: target })
+    .eq("user_id", userData.user.id)
+    .select("id, tracked_badge_id")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[setOwnTrackedBadge] update failed:", error.message);
+    return { error: t("generic") };
+  }
+  // No row updated: a valid session that isn't linked to a member (an admin-only
+  // account). Distinct from a write error, and neither is the generic message.
+  if (!data) return { error: t("memberNotFound") };
+
+  // The tracker is server-rendered into /portal, so a later navigation there must
+  // not serve a cached page still showing the old goal.
+  revalidatePath("/portal");
+
+  return { success: true, badgeId: (data.tracked_badge_id as number | null) ?? null };
 }

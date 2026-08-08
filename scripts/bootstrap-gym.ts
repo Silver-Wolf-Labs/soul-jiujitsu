@@ -14,8 +14,9 @@
  *
  * Prerequisites:
  *   - Supabase project created and migrations applied
- *   - Stripe account created
  *   - .env.local with at least SUPABASE_URL, ANON_KEY, and SERVICE_ROLE_KEY
+ *
+ * There is no payment processor to set up: the gym collects payment in person.
  */
 
 import * as readline from "readline";
@@ -94,8 +95,6 @@ async function main() {
   if (!supabaseAnonKey) supabaseAnonKey = await ask("Supabase anon key");
   if (!supabaseServiceKey) supabaseServiceKey = await ask("Supabase service role key");
 
-  const stripeKey = await ask("Stripe secret key (sk_test_...)", "sk_test_placeholder");
-  const stripeWebhook = await ask("Stripe webhook secret (whsec_...)", "whsec_placeholder");
   const superAdminPw = await ask("Super Admin password (min 16 chars)", "");
 
   // Write .env.local
@@ -108,10 +107,6 @@ async function main() {
 NEXT_PUBLIC_SUPABASE_URL=${supabaseUrl}
 NEXT_PUBLIC_SUPABASE_ANON_KEY=${supabaseAnonKey}
 SUPABASE_SERVICE_ROLE_KEY=${supabaseServiceKey}
-
-# Stripe
-STRIPE_SECRET_KEY=${stripeKey}
-STRIPE_WEBHOOK_SECRET=${stripeWebhook}
 
 # Site
 NEXT_PUBLIC_SITE_URL=${siteUrl}
@@ -243,8 +238,6 @@ ${superAdminPw ? `\n# Super Admin\nSUPER_ADMIN_PASSWORD=${superAdminPw}` : "# SU
   console.log("  □ Set up your schedule (Admin → Schedule)");
   console.log("  □ Configure the theme (Admin → Appearance)");
   console.log("  □ Set hours & map embed (Admin → Location)");
-  console.log("  □ Update Stripe webhook URL in Stripe Dashboard");
-  console.log(`    → ${siteUrl}/api/webhooks/stripe`);
   console.log("  □ Visit /super-admin to verify platform access");
   console.log("  □ Create an admin user:");
   console.log("    1. Sign up at /join");

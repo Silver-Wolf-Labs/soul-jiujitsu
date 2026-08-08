@@ -56,6 +56,10 @@ const PII_KEYS = new Set([
   "phone_number",
   "emergency_contact_phone",
   "emergency_contact_name",
+  // Kept after the payment integration was removed: the column still holds
+  // historical values, so anything that spreads a member row into a log
+  // context could still surface one. Removing it from this list would be the
+  // only way for that to start leaking.
   "stripe_customer_id",
   "password",
   "access_token",

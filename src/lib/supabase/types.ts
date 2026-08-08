@@ -283,7 +283,20 @@ export interface Member {
   birth_month: number | null;        // 1–12
   birth_year: number | null;         // e.g. 1990
   gender: "male" | "female" | "other" | "prefer_not_to_say" | null;
-  // Stripe
+  /**
+   * Member hid themselves from the portal team leaderboard. Set by the member
+   * from /portal; they still see their own row so they can undo it. The
+   * exclusion is enforced inside get_team_leaderboard, not in app code.
+   */
+  leaderboard_opt_out: boolean;
+  /**
+   * Legacy payment-processor link. No code reads or writes it any more — the gym
+   * collects payment in person. It stays typed because the *column* still exists
+   * (dropping it would destroy the only mapping back to historical processor
+   * records, and that is not reversible without the owner's say-so), and a type
+   * that lies about the schema is worse than one carrying a dead field.
+   * Also still in log.ts PII_KEYS, so any row logged with it gets redacted.
+   */
   stripe_customer_id: string | null;
 }
 
@@ -307,7 +320,7 @@ export interface MembershipPlan {
   cta_href: string;
   display_order: number;
   visible: boolean;
-  // Stripe
+  /** Legacy processor links — see the note on Member.stripe_customer_id. */
   stripe_product_id: string | null;
   stripe_default_price_id: string | null;
 }
@@ -339,9 +352,13 @@ export interface MemberMembership {
   plan_name: string | null;             // snapshot at assignment time
   plan_billing_interval: string | null; // snapshot at assignment time
   created_at: string;
-  // Stripe
+  /** Legacy processor links — see the note on Member.stripe_customer_id. */
   stripe_subscription_id: string | null;
   stripe_price_id: string | null;
+  /**
+   * Was maintained by the subscription webhook. Nothing advances it now, so the
+   * portal's billing table shows it only when present and falls back to "—".
+   */
   current_period_end: string | null;
   is_comp: boolean;
 }
@@ -356,11 +373,18 @@ export interface MemberPurchase {
   purchased_at: string;
   notes: string | null;
   created_at: string;
-  // Stripe
+  /** Legacy processor links — see the note on Member.stripe_customer_id. */
   stripe_payment_intent_id: string | null;
   stripe_checkout_session_id: string | null;
 }
 
+/**
+ * Row shape of the `stripe_events` webhook-idempotency table.
+ *
+ * Nothing writes to it: the webhook route that did was deleted with the payment
+ * integration. Kept alongside the table itself so that if the historical rows
+ * ever need reading (a refund dispute, an audit), there is a type for them.
+ */
 export interface StripeEvent {
   id: string;
   type: string;

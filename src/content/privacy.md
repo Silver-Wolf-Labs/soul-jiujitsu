@@ -15,21 +15,18 @@ information we collect, how we use it, and your rights.
 
 - **Account info:** name, email, phone number, emergency contact
 - **Training info:** belt rank, check-in history, class attendance
-- **Payment info:** handled by Stripe; we never see your card number
+- **Payment info:** none. Payment is arranged in person at the gym, so we do not collect or store card details. We record which plan you are on and its price.
 - **Technical info:** IP address, browser type, pages visited
 
 ## 2. How we use it
 
 - To operate your membership and schedule your classes
-- To process payments via Stripe
-- To send you transactional emails (signup verification, receipts,
-  class reminders)
+- To send you transactional emails (signup verification, class reminders)
 - To comply with legal obligations (waiver enforcement, tax records)
 
 ## 3. Sharing
 
 We do not sell your information. We share only with:
-- **Stripe** (payment processing)
 - **Supabase** (data hosting — US region)
 - **AWS** (infrastructure, email via SES)
 - Legal authorities when required by law

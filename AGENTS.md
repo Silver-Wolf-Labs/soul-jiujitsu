@@ -4,7 +4,10 @@ Guidance for coding agents working in this repo.
 
 ## Project
 
-Next.js 15 (App Router) + Supabase (Postgres + RLS) + Tailwind v3 + Stripe.
+Next.js 15 (App Router) + Supabase (Postgres + RLS) + Tailwind v3. No payment
+processor — the profe collects payment in person; the app records which plan
+each member is on. Prices are stored as `price_cents` and displayed in colones
+(`src/lib/currency.ts`).
 Deployed via Amplify (`amplify.yml`) with a Vercel config also present.
 
 ```
@@ -15,7 +18,7 @@ src/lib/          Business logic; actions/ = server actions (mutations),
                   supabase/ = client+server setup, validations/ = zod schemas
 src/lib/__tests__ Vitest specs (pure functions only)
 supabase/         schema.sql, seed.sql, migrations/
-scripts/          One-off ops scripts (stripe-sync, smoke-test, bootstrap-gym)
+scripts/          One-off ops scripts (smoke-test, bootstrap-gym)
 docs/             Runbook, hardening sprint HLD/handoff, account security
 ```
 

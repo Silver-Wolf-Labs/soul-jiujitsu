@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { getTranslations } from "next-intl/server";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
@@ -6,7 +5,6 @@ import type { MemberStatus, MemberMembership, MembershipPlan } from "@/lib/supab
 import { getGymProfile } from "@/lib/gym-profile";
 import { formatDateTz, formatDateTimeTz } from "@/lib/utils";
 import CurrentPlanCard from "./CurrentPlanCard";
-import CheckoutReturnBanner from "./CheckoutReturnBanner";
 import WaiverStatusBanner from "./WaiverStatusBanner";
 import {
   getOwnMemberStats,
@@ -16,7 +14,10 @@ import {
   getOwnTodayClasses,
   getTeamLeaderboard,
   getTeamActivity,
+  getOwnLeaderboardOptOut,
+  getOwnTrackedBadge,
 } from "@/lib/actions/portal";
+import type { TrackedBadgeState } from "@/lib/badge-progress";
 import SelfCheckInCard from "./SelfCheckInCard";
 import TeamFeed from "@/components/member/TeamFeed";
 import type { PortalTodayClass } from "@/lib/actions/portal";
@@ -27,6 +28,7 @@ import PortalStatsCard from "./PortalStatsCard";
 import XpProgressCard from "@/components/member/XpProgressCard";
 import StreakCard from "@/components/member/StreakCard";
 import BadgeGrid from "@/components/member/BadgeGrid";
+import BadgeTrackerCard from "@/components/member/BadgeTrackerCard";
 import BadgeCelebration from "@/components/member/BadgeCelebration";
 import type {
   CheckInRow,
@@ -151,6 +153,18 @@ export default async function PortalHomePage() {
   }
   const unseenBadges = badges.earned.filter((b) => b.seen_at === null);
 
+  // The tracked badge, in its own try/catch and deliberately not bundled with the
+  // pair above. It reads a column that only exists after 20260813000000 and an RPC
+  // that only exists after 20260814000000 — a deploy that gets ahead of either must
+  // not take the badge wall down with it. "No goal" is the honest fallback: it is
+  // also what a member who hasn't picked one sees.
+  let tracked: TrackedBadgeState = { badge: null, progress: { kind: "manual" } };
+  try {
+    tracked = await getOwnTrackedBadge();
+  } catch {
+    // Falls back to the empty tracker.
+  }
+
   // Today's schedule for self check-in, plus the social feed's first paint.
   // Separate try/catch again, and separate from each other: the team feed reads
   // through SECURITY DEFINER RPCs that a fresh deploy might not have yet, and
@@ -171,6 +185,19 @@ export default async function PortalHomePage() {
     ]);
   } catch {
     // Non-critical; the feed renders its own empty state.
+  }
+
+  // Separate from the pair above, and deliberately so: this reads a column that
+  // only exists after 20260812000000_leaderboard_opt_out, and a deploy that gets
+  // ahead of the migration must not take the whole board down with it. False is
+  // the pre-existing behaviour — visible — so the toggle reads "Ocultarme" until
+  // the column lands, which is the honest answer while there is nothing to hide
+  // behind.
+  let teamOptOut = false;
+  try {
+    teamOptOut = await getOwnLeaderboardOptOut();
+  } catch {
+    // Falls back to visible.
   }
 
   if (!member) {
@@ -195,10 +222,9 @@ export default async function PortalHomePage() {
 
   return (
     <div className="space-y-8">
-      <Suspense fallback={null}>
-        <CheckoutReturnBanner />
-      </Suspense>
-
+      {/* A checkout-return banner used to sit here, reading ?checkout=success off
+          the URL after a redirect back from the payment processor. There is no
+          redirect to come back from now. */}
       <WaiverStatusBanner status={member.waiver_status} />
 
       <div>
@@ -323,17 +349,10 @@ export default async function PortalHomePage() {
             >
               {t("billingHistory")}
             </Link>
-            {/* Self-serve billing — goes to Stripe Customer Portal.
-                Members can cancel (at period end), update payment
-                method, download invoices. No admin involvement.
-                The route handles the stripe-customer-missing case by
-                redirecting back here with ?billing_error=... */}
-            <a
-              href="/api/portal/billing"
-              className="block text-sm text-black dark:text-ink underline underline-offset-2 hover:opacity-70"
-            >
-              {t("manageBilling")} ↗
-            </a>
+            {/* A "manage billing" link to the processor's hosted portal used to be
+                the third item here. Removing it leaves nothing to link to — the
+                payment itself happens at the gym — so the quick-links card just
+                has one fewer link rather than a dead end. */}
           </div>
         </div>
       </div>
@@ -352,12 +371,27 @@ export default async function PortalHomePage() {
         </div>
       </div>
 
+      {/* Goal first, then the wall it was picked from — one section, read in the
+          order a member uses it. Above the wall rather than up in the progress row
+          because the tracker is the wall's counterpart: thirty locked silhouettes
+          are what makes picking one worth doing, and thirty locked silhouettes are
+          what the picker is drawn from.
+
+          Outside the `badges` try/catch on purpose: BadgeGrid returns null when the
+          catalogue read failed, and a member who has already chosen a goal should
+          still see it move. */}
+      <BadgeTrackerCard initial={tracked} />
+
       {/* Badge wall — earned badges plus the locked ones as goals. */}
       <BadgeGrid earned={badges.earned} locked={badges.locked} />
 
       {/* The rest of the gym. Last because it's the browsing surface: a member
           checks in, sees their own numbers, then looks outward. */}
-      <TeamFeed initialLeaderboard={teamLeaderboard} initialActivity={teamActivity} />
+      <TeamFeed
+        initialLeaderboard={teamLeaderboard}
+        initialActivity={teamActivity}
+        initialOptOut={teamOptOut}
+      />
 
       {/* Fires once for anything earned since the member last looked. */}
       <BadgeCelebration unseen={unseenBadges} />

@@ -9,8 +9,8 @@ import { useGymProfile } from "@/lib/gym-profile-context";
 import { substituteWaiverPlaceholders } from "@/lib/waiver-substitute";
 import { updateOwnProfile, updateOwnEmergencyContact, updateOwnTrainingInfo, getOwnBeltHistory, getOwnCheckIns } from "@/lib/actions/portal";
 import { signWaiver, getSignatureImageUrl } from "@/lib/actions/waivers";
-import { createBillingPortalSession } from "@/lib/actions/billing";
-import { formatCents, formatDateTz, formatDateTimeTz } from "@/lib/utils";
+import { formatColonesWithSign } from "@/lib/currency";
+import { formatDateTz, formatDateTimeTz } from "@/lib/utils";
 import { BeltColor } from "@/lib/constants";
 import BeltVisual from "@/components/ui/BeltVisual";
 import Spinner, { SpinnerButton } from "@/components/ui/Spinner";
@@ -733,61 +733,42 @@ function EmergencyContactTab({
 
 // ── PaymentMethodsTab ──────────────────────────────────────────────────────
 
+/**
+ * Static now, and intentionally not deleted.
+ *
+ * This tab used to open the payment processor's hosted portal (saved cards,
+ * invoices, self-serve cancel). With payment collected in person there is no
+ * portal to open — but "Pagos" is the first place a member looks when they
+ * wonder how they owe the gym money, so the tab stays and answers the question
+ * instead of disappearing and leaving them guessing.
+ *
+ * No state, no action call: nothing here can fail, so there is no error branch.
+ */
 function PaymentMethodsTab() {
   const t = useTranslations("portal.profile.payment");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleManageBilling() {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await createBillingPortalSession();
-      if ("error" in result) {
-        // Already Spanish, from portal.errors — the action resolves its own copy.
-        setError(result.error);
-      } else {
-        window.location.href = result.url;
-        return; // Don't clear loading — navigating away
-      }
-    } catch {
-      setError(t("genericError"));
-    }
-    setLoading(false);
-  }
 
   return (
     <div className="max-w-md">
-      <div className="border border-line rounded-lg p-6 text-center space-y-4">
+      <div className="border border-line rounded-lg p-6 space-y-4">
+        {/* Was a credit-card glyph. A storefront reads as "come by the gym",
+            which is the actual instruction. */}
         <div className="mx-auto w-14 h-10 bg-off-white border border-line rounded flex items-center justify-center">
           <svg
-            className="w-7 h-5 text-muted"
+            className="w-6 h-6 text-muted"
             fill="none"
             stroke="currentColor"
             strokeWidth={1.5}
             viewBox="0 0 24 24"
           >
-            <rect x="2" y="5" width="20" height="14" rx="2" />
-            <line x1="2" y1="10" x2="22" y2="10" />
+            <path d="M3 9.5 12 4l9 5.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M5 10.5V20h14v-9.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M10 20v-5h4v5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
-        <p className="text-sm text-muted">
-          {t("intro")}
-        </p>
-        {error && (
-          <p className="text-xs text-danger bg-danger-light border border-danger-border rounded px-3 py-2">
-            {error}
-          </p>
-        )}
-        <div>
-          <button
-            onClick={handleManageBilling}
-            disabled={loading}
-            className="px-4 py-2 bg-black text-white dark:bg-yellow dark:text-black border border-black dark:border-yellow rounded text-sm font-semibold hover:bg-near-black dark:hover:bg-yellow-deep transition-colors disabled:opacity-50"
-          >
-            {loading ? t("opening") : t("manage")}
-          </button>
-        </div>
+        <p className="text-sm text-ink">{t("intro")}</p>
+        <p className="text-sm text-muted">{t("noOnlinePayments")}</p>
+        <p className="text-sm text-muted">{t("askProfe")}</p>
+        <p className="text-xs text-muted border-t border-line pt-4">{t("historyHint")}</p>
       </div>
     </div>
   );
@@ -839,7 +820,7 @@ function BillingHistoryTab({ memberships }: { memberships: MemberMembershipWithP
                     {tStatus(ms.status)}
                   </span>
                 </td>
-                <td className="py-3 pr-4 text-ink">{formatCents(effectivePrice)}</td>
+                <td className="py-3 pr-4 text-ink">{formatColonesWithSign(effectivePrice)}</td>
                 <td className="py-3 pr-4 text-muted">{formatDateOrDash(ms.started_at)}</td>
                 <td className="py-3 pr-4 text-muted text-xs">{nextBilling}</td>
                 <td className="py-3 text-muted">{formatDateOrDash(ms.ends_at)}</td>
@@ -848,6 +829,10 @@ function BillingHistoryTab({ memberships }: { memberships: MemberMembershipWithP
           })}
         </tbody>
       </table>
+      {/* This table used to be a record of charges that had actually happened.
+          It is now a record of memberships and what each one costs, so it says
+          so — otherwise a member reads "₡40.000" as a receipt. */}
+      <p className="mt-4 text-xs text-muted">{t("payAtGym")}</p>
     </div>
   );
 }

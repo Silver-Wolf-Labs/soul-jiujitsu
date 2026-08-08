@@ -10,7 +10,7 @@
  * The reason is blast radius. Moving every route under a locale segment would
  * touch the auth middleware (which gates /portal on a signed waiver), the
  * Supabase redirect allowlist — an exact-match list of URLs configured in a
- * dashboard, outside this repo — the Stripe return URLs, and the sitemap. That
+ * dashboard, outside this repo — and the sitemap. That
  * is a lot of surface to disturb for the actual goal, which is that the member
  * portal stopped being half English.
  *

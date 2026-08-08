@@ -88,11 +88,6 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Stripe webhook — unauthenticated inbound POST, skip all auth
-  if (pathname === "/api/webhooks/stripe") {
-    return supabaseResponse;
-  }
-
   // Protect all /admin routes except /admin/login
   if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
     const kioskCookie = request.cookies.get("kiosk_token")?.value;

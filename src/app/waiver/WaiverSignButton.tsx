@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { signWaiver } from "@/lib/actions/waivers";
 import { SpinnerButton } from "@/components/ui/Spinner";
 import { SignatureCanvas, SignatureCanvasHandle } from "@/components/signature/SignatureCanvas";
@@ -39,6 +40,7 @@ export default function WaiverSignButton({
   children,
 }: Props) {
   const router = useRouter();
+  const t = useTranslations("waiver");
 
   // ── Scroll gate ────────────────────────────────────────────────────────
   // Users must scroll to the end before they can agree. Matches the signup
@@ -109,7 +111,7 @@ export default function WaiverSignButton({
         // Prefer the fullscreen-confirmed image; fall back to inline canvas
         const dataUrl = confirmedDataUrl ?? canvasRef.current?.toDataURL() ?? "";
         if (!dataUrl) {
-          setError("Please draw your signature before continuing.");
+          setError(t("drawFirst"));
           return;
         }
         result = await signWaiver(templateId, { type: "drawn", dataUrl });
@@ -131,10 +133,12 @@ export default function WaiverSignButton({
       // RPC, etc.) otherwise leave the user staring at a spinner that resets
       // with no feedback. Surface the error instead of swallowing it.
       console.error("[WaiverSignButton] handleSign threw:", e);
+      // `e.message` is a developer artefact (network stack, Postgres) and stays
+      // untranslated — the sentence around it is what the member reads.
       setError(
         e instanceof Error
-          ? `Failed to record signature: ${e.message}`
-          : "Failed to record signature. Please try again."
+          ? t("recordFailedDetail", { detail: e.message })
+          : t("recordFailed")
       );
     } finally {
       setSigning(false);
@@ -160,7 +164,7 @@ export default function WaiverSignButton({
         </div>
         {!hasScrolledToEnd && (
           <p className="mt-2 text-xs text-muted text-center">
-            Scroll to the end of the waiver to enable signing.
+            {t("scrollToEnd")}
           </p>
         )}
       </div>
@@ -169,7 +173,7 @@ export default function WaiverSignButton({
         {/* ── Method tabs ─────────────────────────────────────────────── */}
         <div>
           <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">
-            Signature method
+            {t("signatureMethod")}
           </p>
           <div className="flex rounded border border-line overflow-hidden">
             {(["typed", "drawn"] as const).map((m) => (
@@ -183,7 +187,7 @@ export default function WaiverSignButton({
                     : "bg-white text-ink hover:bg-off-white"
                 }`}
               >
-                {m === "typed" ? "Type initials" : "Draw signature"}
+                {m === "typed" ? t("methodTyped") : t("methodDrawn")}
               </button>
             ))}
           </div>
@@ -193,13 +197,13 @@ export default function WaiverSignButton({
         {method === "typed" && (
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-ink">
-              Your initials
+              {t("yourInitials")}
             </label>
             <div className="w-full border border-line rounded px-3 py-3 text-2xl font-semibold tracking-[0.3em] text-black bg-off-white text-center select-none">
               {requiredInitials}
             </div>
             <p className="text-xs text-muted">
-              Initials are generated from your legal name on file. By checking the agreement box below, you confirm these as your signature.
+              {t("initialsNote")}
             </p>
           </div>
         )}
@@ -208,14 +212,14 @@ export default function WaiverSignButton({
         {method === "drawn" && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-ink">Your signature</span>
+              <span className="text-xs font-medium text-ink">{t("yourSignature")}</span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handleClearDrawn}
                   className="text-xs text-muted hover:text-ink transition-colors"
                 >
-                  Clear
+                  {t("clear")}
                 </button>
                 <button
                   type="button"
@@ -226,7 +230,7 @@ export default function WaiverSignButton({
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
                     <path d="M1 4V1h3M8 1h3v3M11 8v3H8M4 11H1V8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
-                  Full screen
+                  {t("fullScreen")}
                 </button>
               </div>
             </div>
@@ -237,12 +241,12 @@ export default function WaiverSignButton({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={confirmedDataUrl}
-                  alt="Your drawn signature"
+                  alt={t("signatureAlt")}
                   className="w-full h-auto block"
                 />
                 <div className="absolute inset-0 flex items-end justify-end p-2 pointer-events-none">
                   <span className="text-xs text-success font-medium bg-white/80 px-1.5 py-0.5 rounded">
-                    ✓ Signed
+                    ✓ {t("signed")}
                   </span>
                 </div>
               </div>
@@ -255,16 +259,18 @@ export default function WaiverSignButton({
                 />
                 {canvasEmpty && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
-                    <p className="text-line text-sm">Sign here with your finger or mouse</p>
+                    <p className="text-line text-sm">{t("drawHere")}</p>
                   </div>
                 )}
               </div>
             )}
 
+            {/* t.rich: "Pantalla completa" is bold mid-sentence and Spanish puts
+                it in a different position than English did. */}
             <p className="text-xs text-muted">
-              Tip: tap{" "}
-              <strong className="font-medium text-ink">Full screen</strong> for a
-              larger signing area — useful on phones.
+              {t.rich("fullScreenTip", {
+                b: (chunks) => <strong className="font-medium text-ink">{chunks}</strong>,
+              })}
             </p>
           </div>
         )}
@@ -283,7 +289,7 @@ export default function WaiverSignButton({
             className="mt-0.5 w-4 h-4 rounded border-line accent-black flex-shrink-0 disabled:cursor-not-allowed"
           />
           <span className="text-sm text-ink group-hover:text-black transition-colors">
-            I have read and agree to all terms above
+            {t("agree")}
           </span>
         </label>
 
@@ -296,12 +302,12 @@ export default function WaiverSignButton({
           disabled={!canSubmit}
           className="w-full bg-black text-white text-sm font-semibold py-3 rounded hover:bg-near-black disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
-          {signing ? <SpinnerButton label="Signing" /> : "Sign & Continue"}
+          {signing ? <SpinnerButton label={t("submitting")} /> : t("submit")}
         </button>
 
         {!hasSignature && agreed && (
           <p className="text-xs text-center text-muted">
-            Draw your signature above to continue.
+            {t("drawToContinue")}
           </p>
         )}
       </div>

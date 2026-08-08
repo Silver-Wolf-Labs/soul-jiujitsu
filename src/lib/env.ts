@@ -11,11 +11,15 @@ const REQUIRED_SERVER = [
   "SUPABASE_SERVICE_ROLE_KEY",
 ] as const;
 
-/** Vars that are optional but trigger a warning when missing */
-const OPTIONAL_WARN = [
-  "STRIPE_SECRET_KEY",
-  "STRIPE_WEBHOOK_SECRET",
-] as const;
+/**
+ * Vars that are optional but trigger a warning when missing.
+ *
+ * Empty since the payment processor was removed — the gym collects payment in
+ * person, so there are no third-party API keys left that merely degrade a
+ * feature when absent. Kept (rather than deleted) because the warning loop
+ * below is the documented extension point for the next optional integration.
+ */
+const OPTIONAL_WARN: readonly string[] = [] as const;
 
 const REQUIRED_PUBLIC = [
   "NEXT_PUBLIC_SUPABASE_URL",
@@ -81,7 +85,7 @@ export function validateEnv(): void {
     }
   }
 
-  // Warn about missing optional vars (Stripe, etc.)
+  // Warn about missing optional vars
   const missingOptional = OPTIONAL_WARN.filter((k) => !process.env[k]);
   if (missingOptional.length > 0) {
     console.warn(

@@ -135,10 +135,10 @@ function builder(page: Page, tags: string[]) {
   return (
     new AxeBuilder({ page })
       .withTags(tags)
-      // The Stripe checkout iframe and the Google Maps embed are third-party
-      // documents we cannot fix and do not control. Scanning them produces
-      // findings no one can action.
-      .exclude("iframe[src*='stripe.com']")
+      // The Google Maps embed is a third-party document we cannot fix and do not
+      // control. Scanning it produces findings no one can action. (A payment
+      // processor's checkout iframe was excluded here too, until that
+      // integration was removed.)
       .exclude("iframe[src*='google.com']")
       .exclude("iframe[src*='maps.google']")
   );

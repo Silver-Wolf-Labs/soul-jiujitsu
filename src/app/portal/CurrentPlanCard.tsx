@@ -6,7 +6,8 @@ import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
 import { selfEnrollInPlan } from "@/lib/actions/portal";
 import { requestCancellation } from "@/lib/actions/billing";
-import { formatCents, formatDate } from "@/lib/utils";
+import { formatColones, formatColonesWithSign } from "@/lib/currency";
+import { formatDate } from "@/lib/utils";
 import Spinner, { SpinnerButton } from "@/components/ui/Spinner";
 import {
   HIGHLIGHT_BG_CLASS,
@@ -64,7 +65,7 @@ export default function CurrentPlanCard({
   const tStatus = useTranslations("portal.membershipStatus");
   const [showModal, setShowModal] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
-  const [cancelResult, setCancelResult] = useState<{ cancelAt: string; chargedAgain: boolean } | null>(null);
+  const [cancelResult, setCancelResult] = useState<{ cancelAt: string } | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [isCanceling, startCancelTransition] = useTransition();
 
@@ -97,7 +98,7 @@ export default function CurrentPlanCard({
               {/* The interval was the raw enum ("month") beside a Spanish price.
                   Both halves go through the message now. */}
               {t("perInterval", {
-                price: effectivePrice !== null ? formatCents(effectivePrice) : "—",
+                price: effectivePrice !== null ? formatColonesWithSign(effectivePrice) : "—",
                 interval: tInterval(plan.billing_interval),
               })}
             </div>
@@ -109,6 +110,14 @@ export default function CurrentPlanCard({
               </span>
             </div>
 
+            {/* Where the "manage payment method" link used to be. A member on a
+                paid plan needs to know the money is handled in person, not that
+                nothing exists here — comped members are excluded because there
+                is nothing for them to pay. */}
+            {!isComp && (
+              <p className="mt-3 text-xs text-muted">{t("payAtGym")}</p>
+            )}
+
             {/* Cancellation UI */}
             {cancelResult ? (
               <div className="mt-3 text-xs text-muted bg-off-white border border-line rounded px-3 py-2">
@@ -118,9 +127,6 @@ export default function CurrentPlanCard({
                   date: formatDate(cancelResult.cancelAt),
                   b: (chunks) => <span className="font-semibold text-ink">{chunks}</span>,
                 })}
-                {cancelResult.chargedAgain && (
-                  <span className="block mt-1 text-yellow-dark">{t("chargedOnceMore")}</span>
-                )}
               </div>
             ) : hasPendingCancel ? (
               <div className="mt-3 text-xs text-muted">
@@ -231,11 +237,9 @@ function PlanSelectionModal({ onClose }: { onClose: () => void }) {
       if ("error" in result) {
         setError(result.error);
         setEnrollingId(null);
-      } else if ("checkoutUrl" in result) {
-        // Redirect to Stripe Checkout for paid enrollment
-        window.location.href = result.checkoutUrl;
       } else {
-        // Trial enrollment — no payment needed
+        // Trial enrollment is the only self-serve path — paid plans are
+        // arranged with the profe, and the server rejects them.
         onClose();
         router.refresh();
       }
@@ -274,17 +278,25 @@ function PlanSelectionModal({ onClose }: { onClose: () => void }) {
           ) : plans.length === 0 ? (
             <p className="text-sm text-muted text-center py-12">{t("noPlans")}</p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {plans.map(plan => (
-                <PlanCard
-                  key={plan.id}
-                  plan={plan}
-                  enrolling={enrollingId === plan.id && isPending}
-                  disabled={isPending}
-                  onEnroll={() => handleEnroll(plan.id)}
-                />
-              ))}
-            </div>
+            <>
+              {/* Sets expectations before the member clicks: only trial plans
+                  activate from here. Without this the paid cards look broken
+                  rather than intentionally staffed. */}
+              <p className="mb-4 text-xs text-muted bg-off-white border border-line rounded-lg px-4 py-2.5">
+                {t("trialOnlyNote")}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {plans.map(plan => (
+                  <PlanCard
+                    key={plan.id}
+                    plan={plan}
+                    enrolling={enrollingId === plan.id && isPending}
+                    disabled={isPending}
+                    onEnroll={() => handleEnroll(plan.id)}
+                  />
+                ))}
+              </div>
+            </>
           )}
 
           {/* Already Spanish — selfEnrollInPlan resolves its own copy from
@@ -342,8 +354,11 @@ function PlanCard({
         {plan.name}
       </div>
       <div className="font-display text-[48px] leading-none text-ink">
-        <sup className="text-xl align-top mt-2">$</sup>
-        {Math.floor(plan.price_cents / 100)}
+        {/* The sign stays a separate <sup> so it doesn't scale with the 48px
+            number — hence formatColones (bare digits) rather than the
+            with-sign variant. */}
+        <sup className="text-xl align-top mt-2">₡</sup>
+        {formatColones(plan.price_cents)}
       </div>
       <div className="text-[13px] text-muted mb-5">{formatPeriod(plan, t)}</div>
 
@@ -356,19 +371,29 @@ function PlanCard({
         ))}
       </ul>
 
-      <button
-        onClick={onEnroll}
-        disabled={disabled}
-        className={`mt-auto w-full py-2.5 rounded text-[12px] font-bold tracking-wider uppercase transition-all duration-150 border ${
-          showBadge
-            ? "bg-black text-white dark:bg-yellow dark:text-black border-black dark:border-yellow hover:bg-near-black dark:hover:bg-yellow-deep disabled:opacity-40"
-            // The hover state needs its own dark triplet: hovering to
-            // black-on-black would blank the button out on a dark card.
-            : "bg-white dark:bg-portal-card text-ink border-line hover:border-black hover:bg-black hover:text-white dark:hover:border-yellow dark:hover:bg-yellow dark:hover:text-black disabled:opacity-40"
-        } disabled:cursor-not-allowed`}
-      >
-        {enrolling ? <SpinnerButton label={t("enrolling")} /> : t("enroll")}
-      </button>
+      {/* A trial is the only plan this button can actually activate — the server
+          action rejects paid ones, because nothing here can take the money. So a
+          paid card gets the in-person instruction instead of a button that is
+          guaranteed to fail on click. */}
+      {plan.trial_days > 0 ? (
+        <button
+          onClick={onEnroll}
+          disabled={disabled}
+          className={`mt-auto w-full py-2.5 rounded text-[12px] font-bold tracking-wider uppercase transition-all duration-150 border ${
+            showBadge
+              ? "bg-black text-white dark:bg-yellow dark:text-black border-black dark:border-yellow hover:bg-near-black dark:hover:bg-yellow-deep disabled:opacity-40"
+              // The hover state needs its own dark triplet: hovering to
+              // black-on-black would blank the button out on a dark card.
+              : "bg-white dark:bg-portal-card text-ink border-line hover:border-black hover:bg-black hover:text-white dark:hover:border-yellow dark:hover:bg-yellow dark:hover:text-black disabled:opacity-40"
+          } disabled:cursor-not-allowed`}
+        >
+          {enrolling ? <SpinnerButton label={t("enrolling")} /> : t("enrollTrial")}
+        </button>
+      ) : (
+        <p className="mt-auto text-center text-[12px] text-muted border-t border-line pt-3">
+          {t("payAtGym")}
+        </p>
+      )}
     </div>
   );
 }

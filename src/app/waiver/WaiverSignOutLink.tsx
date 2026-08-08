@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
 import Spinner from "@/components/ui/Spinner";
 
@@ -17,6 +18,7 @@ import Spinner from "@/components/ui/Spinner";
  */
 export default function WaiverSignOutLink() {
   const router = useRouter();
+  const t = useTranslations("waiver");
   const [busy, setBusy] = useState(false);
 
   async function handleSignOut() {
@@ -34,7 +36,7 @@ export default function WaiverSignOutLink() {
       disabled={busy}
       className="text-xs text-muted hover:text-ink underline underline-offset-2 disabled:opacity-50 transition-colors"
     >
-      {busy ? <span className="inline-flex items-center gap-1"><Spinner size="sm" delay={false} /> Signing out</span> : "Not you? Sign out"}
+      {busy ? <span className="inline-flex items-center gap-1"><Spinner size="sm" delay={false} /> {t("signingOut")}</span> : t("notYou")}
     </button>
   );
 }

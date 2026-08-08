@@ -1,17 +1,18 @@
 "use server";
 
+/**
+ * Membership plan + member-membership admin actions.
+ *
+ * There is no payment processor in this system: the profe collects payment in
+ * person at the gym, and these actions are the record of who is on which plan.
+ * `price_cents` is therefore a *display and bookkeeping* figure — writing it
+ * never moves money. See src/lib/currency.ts for how it is rendered (colones).
+ */
+
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin, requireOwner } from "@/lib/supabase/require-admin";
 import { logAuditEvent } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
-import {
-  getStripe,
-  findOrCreateStripeCustomer,
-  findOrCreateStripePrice,
-  createCheckoutSession,
-  ensureStripeProduct,
-  isStripeConfigured,
-} from "@/lib/stripe";
 
 type PlanPayload = {
   name: string;
@@ -41,19 +42,6 @@ export async function createMembershipPlan(data: PlanPayload) {
     .select("id").single();
   if (error) throw new Error(error.message);
 
-  // Auto-create Stripe Product + Price — errors propagate so admin can retry
-  const { productId, priceId } = await ensureStripeProduct({
-    id: row.id,
-    name: data.name,
-    description: data.description,
-    price_cents: data.price_cents,
-    billing_interval: data.billing_interval,
-  });
-  await supabase.from("membership_plans").update({
-    stripe_product_id: productId,
-    stripe_default_price_id: priceId,
-  }).eq("id", row.id);
-
   await logAuditEvent("CREATE", "membership_plans", String(row.id), { ...data });
   revalidatePath("/");
 }
@@ -64,30 +52,6 @@ export async function updateMembershipPlan(id: number, data: Partial<PlanPayload
   const { data: before } = await supabase.from("membership_plans").select("*").eq("id", id).single();
   const { error } = await supabase.from("membership_plans").update(data).eq("id", id);
   if (error) throw new Error(error.message);
-
-  // Sync name change to Stripe (best-effort — don't block local update)
-  if (data.name && before?.stripe_product_id) {
-    try {
-      const stripe = getStripe();
-      await stripe.products.update(before.stripe_product_id, { name: data.name });
-    } catch (err) {
-      console.error("[updateMembershipPlan] Stripe product name sync failed:", err);
-    }
-  }
-
-  // If plan lacks Stripe IDs (previous creation failed), try again with fresh data
-  if (!before?.stripe_product_id) {
-    const { data: fresh } = await supabase.from("membership_plans")
-      .select("name, description, price_cents, billing_interval")
-      .eq("id", id).single();
-    if (fresh) {
-      const { productId, priceId } = await ensureStripeProduct({ id, ...fresh });
-      await supabase.from("membership_plans").update({
-        stripe_product_id: productId,
-        stripe_default_price_id: priceId,
-      }).eq("id", id);
-    }
-  }
 
   await logAuditEvent("UPDATE", "membership_plans", String(id), { before, after: data });
   revalidatePath("/");
@@ -103,7 +67,7 @@ export async function changePlanPrice(
   const supabase = createClient();
   const { data: plan } = await supabase
     .from("membership_plans")
-    .select("price_cents, billing_interval, stripe_product_id")
+    .select("price_cents, billing_interval")
     .eq("id", id)
     .single();
   if (!plan) throw new Error("Plan not found");
@@ -123,20 +87,6 @@ export async function changePlanPrice(
     excluded_member_ids,
   });
 
-  // Create new Stripe Price and update plan default
-  let newStripePriceId: string | null = null;
-  if (plan.stripe_product_id && plan.billing_interval !== "one_time") {
-    newStripePriceId = await findOrCreateStripePrice(
-      plan.stripe_product_id,
-      new_price_cents,
-      plan.billing_interval as "month" | "year"
-    );
-    await supabase
-      .from("membership_plans")
-      .update({ stripe_default_price_id: newStripePriceId })
-      .eq("id", id);
-  }
-
   // Bulk-update locked_price_cents for all current subscribers, skipping exclusions
   if (scope === "all_current") {
     let query = supabase
@@ -151,44 +101,6 @@ export async function changePlanPrice(
 
     const { error: bulkErr } = await query;
     if (bulkErr) throw new Error(bulkErr.message);
-
-    // Propagate price change to existing Stripe subscriptions
-    if (newStripePriceId) {
-      const { data: memberships } = await supabase
-        .from("member_memberships")
-        .select("id, member_id, stripe_subscription_id")
-        .eq("plan_id", id)
-        .in("status", ["active", "trialing", "paused"])
-        .not("stripe_subscription_id", "is", null);
-
-      const stripe = getStripe();
-      const failures: number[] = [];
-
-      for (const ms of memberships ?? []) {
-        if (excluded_member_ids.includes(ms.member_id)) continue;
-        try {
-          const sub = await stripe.subscriptions.retrieve(ms.stripe_subscription_id!);
-          const itemId = sub.items.data[0]?.id;
-          if (itemId) {
-            await stripe.subscriptions.update(ms.stripe_subscription_id!, {
-              items: [{ id: itemId, price: newStripePriceId }],
-              proration_behavior: "none",
-            });
-            await supabase
-              .from("member_memberships")
-              .update({ stripe_price_id: newStripePriceId })
-              .eq("id", ms.id);
-          }
-        } catch (err) {
-          console.error(`[changePlanPrice] Failed to update subscription for membership ${ms.id}:`, err);
-          failures.push(ms.id);
-        }
-      }
-
-      if (failures.length > 0) {
-        console.warn(`[changePlanPrice] Price update failed for ${failures.length} subscriptions: ${failures.join(", ")}`);
-      }
-    }
   }
 
   await logAuditEvent("UPDATE", "membership_plans", String(id), {
@@ -234,10 +146,15 @@ export async function restoreMembershipPlan(id: number) {
 // ── Member membership assignment ──────────────────────────────────────────────
 
 /**
- * Admin plan assignment.
- * - is_comp = true: Free membership (instructor comps, staff, etc). No Stripe.
- * - is_comp = false: Creates a Stripe Checkout link for the member to pay.
- *   Returns the checkout URL so the admin can share it.
+ * Admin plan assignment. Always writes the membership row directly — there is
+ * no online checkout to route through, since the profe collects payment in
+ * person.
+ *
+ * - is_comp = true: complimentary membership (instructor comps, staff,
+ *   make-goods). Locked price is forced to 0.
+ * - is_comp = false: the plan's price is locked onto the membership as the
+ *   amount the member owes the gym. Collecting it is an in-person, off-system
+ *   act; the row records the arrangement, not a payment.
  */
 export async function assignMembership(data: {
   member_id: number;
@@ -245,12 +162,12 @@ export async function assignMembership(data: {
   started_at?: string;
   ends_at?: string;
   is_comp?: boolean;
-}): Promise<{ checkoutUrl?: string; assigned?: boolean }> {
+}): Promise<{ assigned: true }> {
   await requireAdmin();
   const supabase = createClient();
   const { data: plan } = await supabase
     .from("membership_plans")
-    .select("price_cents, name, billing_interval, stripe_product_id, stripe_default_price_id")
+    .select("price_cents, name, billing_interval")
     .eq("id", data.plan_id)
     .single();
   if (!plan) throw new Error("Plan not found");
@@ -259,81 +176,32 @@ export async function assignMembership(data: {
     throw new Error("One-time plans cannot be assigned as memberships. Use createPurchase instead.");
   }
 
-  // Direct-insert branches:
-  //   1. Explicit comp (price 0, is_comp flag).
-  //   2. Stripe not configured at all (env var missing) — the gym is
-  //      running without online payments, admins bill members out-of-band.
-  //   3. Plan hasn't been synced to Stripe (no product/price ids) — same
-  //      story; the plan exists in the DB but has no hosted-checkout path.
-  //
-  // All three write the membership row directly with the appropriate
-  // locked price. Only the explicit comp branch zeroes the price.
-  const stripeReady =
-    isStripeConfigured()
-    && !!plan.stripe_product_id
-    && !!plan.stripe_default_price_id;
-
-  if (data.is_comp || !stripeReady) {
-    const lockedPrice = data.is_comp ? 0 : plan.price_cents;
-    const { data: row, error } = await supabase
-      .from("member_memberships")
-      .insert({
-        member_id: data.member_id,
-        plan_id: data.plan_id,
-        started_at: data.started_at,
-        ends_at: data.ends_at,
-        status: "active",
-        locked_price_cents: lockedPrice,
-        plan_name: plan.name,
-        plan_billing_interval: plan.billing_interval,
-        is_comp: !!data.is_comp,
-      })
-      .select("id").single();
-    if (error) throw new Error(error.message);
-    await logAuditEvent("CREATE", "member_memberships", String(row.id), {
-      ...data,
+  const lockedPrice = data.is_comp ? 0 : plan.price_cents;
+  const { data: row, error } = await supabase
+    .from("member_memberships")
+    .insert({
+      member_id: data.member_id,
+      plan_id: data.plan_id,
+      started_at: data.started_at,
+      ends_at: data.ends_at,
+      status: "active",
       locked_price_cents: lockedPrice,
       plan_name: plan.name,
+      plan_billing_interval: plan.billing_interval,
       is_comp: !!data.is_comp,
-      source: data.is_comp
-        ? "admin_assignment_comp"
-        : "admin_assignment_manual_billing",
-    });
-    return { assigned: true };
-  }
-
-  // Paid membership via Stripe Checkout (Stripe is configured AND the
-  // plan has Stripe IDs). Return a checkout URL the admin can hand to
-  // the member to complete payment.
-  const { data: member } = await supabase
-    .from("members")
-    .select("id, first_name, last_name, email")
-    .eq("id", data.member_id)
-    .single();
-  if (!member) throw new Error("Member not found");
-
-  const customerId = await findOrCreateStripeCustomer(
-    member.id,
-    member.email,
-    `${member.first_name} ${member.last_name}`
-  );
-
-  const checkoutUrl = await createCheckoutSession({
-    memberId: member.id,
-    planId: data.plan_id,
-    customerId,
-    mode: "subscription",
-    priceId: plan.stripe_default_price_id,
-  });
-
-  await logAuditEvent("CREATE", "member_memberships", "pending", {
+    })
+    .select("id").single();
+  if (error) throw new Error(error.message);
+  await logAuditEvent("CREATE", "member_memberships", String(row.id), {
     ...data,
-    locked_price_cents: plan.price_cents,
+    locked_price_cents: lockedPrice,
     plan_name: plan.name,
-    source: "admin_assignment_checkout",
+    is_comp: !!data.is_comp,
+    source: data.is_comp
+      ? "admin_assignment_comp"
+      : "admin_assignment_manual_billing",
   });
-
-  return { checkoutUrl };
+  return { assigned: true };
 }
 
 export async function setMembershipOverridePrice(id: number, override_price_cents: number | null, override_note: string) {
@@ -361,7 +229,7 @@ export async function forceSetMembershipStatus(
   const supabase = createClient();
   const { data: before } = await supabase
     .from("member_memberships")
-    .select("status, stripe_subscription_id, is_comp")
+    .select("status, is_comp")
     .eq("id", id)
     .single();
 
@@ -371,30 +239,6 @@ export async function forceSetMembershipStatus(
     updates.paused_until = paused_until ?? null;
   } else {
     updates.paused_until = null; // clear when leaving paused state
-  }
-
-  // Sync status changes to Stripe for paid memberships
-  if (before?.stripe_subscription_id && !before.is_comp) {
-    try {
-      const stripe = getStripe();
-      const subId = before.stripe_subscription_id;
-
-      if (status === "paused") {
-        await stripe.subscriptions.update(subId, {
-          pause_collection: { behavior: "void" },
-        });
-      } else if (status === "canceled") {
-        await stripe.subscriptions.cancel(subId);
-      } else if (String(before.status) === "paused") {
-        // Resume from pause
-        await stripe.subscriptions.update(subId, {
-          pause_collection: "",
-        });
-      }
-    } catch (err) {
-      console.error("[forceSetMembershipStatus] Stripe sync failed:", err);
-      // Continue with local update
-    }
   }
 
   const { error } = await supabase.from("member_memberships").update(updates).eq("id", id);
@@ -407,36 +251,18 @@ export async function forceSetMembershipStatus(
   });
 }
 
+/**
+ * `mode` is retained in the audit trail but no longer changes what is written:
+ * with no subscription to wind down, cancelling is always effective now. It
+ * still records whether the admin *intended* an immediate cut-off or an
+ * end-of-period one, which is the part the profe may need to honour in person.
+ */
 export async function cancelMembership(
   id: number,
   mode: "immediate" | "end_of_period" = "end_of_period"
 ) {
   await requireAdmin();
   const supabase = createClient();
-
-  // Get current membership to check for Stripe subscription
-  const { data: membership } = await supabase
-    .from("member_memberships")
-    .select("stripe_subscription_id, is_comp")
-    .eq("id", id)
-    .single();
-
-  // Cancel in Stripe if applicable
-  if (membership?.stripe_subscription_id && !membership.is_comp) {
-    try {
-      const stripe = getStripe();
-      if (mode === "immediate") {
-        await stripe.subscriptions.cancel(membership.stripe_subscription_id);
-      } else {
-        await stripe.subscriptions.update(membership.stripe_subscription_id, {
-          cancel_at_period_end: true,
-        });
-      }
-    } catch (err) {
-      console.error("[cancelMembership] Stripe cancellation failed:", err);
-      // Continue with local cancellation — webhook will eventually sync
-    }
-  }
 
   const updates: Record<string, unknown> = {
     status: "canceled",

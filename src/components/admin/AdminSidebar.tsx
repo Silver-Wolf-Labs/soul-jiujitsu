@@ -94,10 +94,13 @@ const Icons = {
       <path d="M5.5 10l1.5 1.5 3-3" />
     </Icon>
   ),
-  DollarSign: () => (
+  // A colón (₡), not a dollar: a C with the two strokes through it. The gym
+  // prices in colones, and this is the icon on the Billing nav item.
+  ColonSign: () => (
     <Icon>
-      <path d="M8 1.5v13" />
-      <path d="M11 4.5H6.5a2.5 2.5 0 0 0 0 5h3a2.5 2.5 0 0 1 0 5H5" />
+      <path d="M12 4a5 5 0 1 0 0 8" />
+      <path d="M5.5 2.5l5 11" />
+      <path d="M9 2.5l-5 11" />
     </Icon>
   ),
   Layout: () => (
@@ -258,7 +261,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Plans & Pricing",  href: "/admin/membership-plans", Icon: Icons.CreditCard },
       { label: "Waivers",          href: "/admin/waivers",          Icon: Icons.FileCheck },
       { label: "Kiosk",            href: "/admin/kiosk",            Icon: Icons.Tablet },
-      { label: "Billing",          href: "/admin/billing",          Icon: Icons.DollarSign },
+      { label: "Billing",          href: "/admin/billing",          Icon: Icons.ColonSign },
     ],
   },
   {

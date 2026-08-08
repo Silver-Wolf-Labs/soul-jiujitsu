@@ -1,6 +1,6 @@
-import { Lock } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { badgeIcon, TIER_STYLES, CATEGORY_ORDER } from "@/lib/badges";
+import { CATEGORY_ORDER } from "@/lib/badges";
+import { BadgeTile } from "@/components/member/BadgeMedal";
 import type { Badge, EarnedBadge, BadgeCategory } from "@/lib/supabase/types";
 
 /**
@@ -15,48 +15,12 @@ import type { Badge, EarnedBadge, BadgeCategory } from "@/lib/supabase/types";
  * render exactly as they were written — the gym authored them. The chrome around
  * them (the heading, the counter, the category headings) is the system talking, so
  * it comes from the catalogue.
+ *
+ * The tile itself now comes from BadgeMedal: the same medal is drawn on the kiosk
+ * profile, on the kiosk success screen and in the celebration modal, and it used to
+ * be four hand-copies of the same disc. This file keeps the grouping, the counters
+ * and the layout — the parts that are specifically the portal's badge WALL.
  */
-
-function EarnedTile({ item }: { item: EarnedBadge }) {
-  const Icon = badgeIcon(item.badge.icon);
-  const tier = TIER_STYLES[item.badge.tier];
-
-  return (
-    <div className="flex flex-col items-center text-center gap-1.5">
-      <div
-        className="w-14 h-14 rounded-full flex items-center justify-center border"
-        style={{ backgroundColor: tier.bg, borderColor: tier.fg, color: tier.fg }}
-      >
-        <Icon className="w-7 h-7" aria-hidden="true" />
-      </div>
-      <div className="text-xs font-semibold text-black dark:text-ink leading-tight">{item.badge.name}</div>
-      <div className="text-[11px] text-muted leading-tight">{item.badge.description}</div>
-      {/* The profe's note on a manual award — the part members screenshot. */}
-      {item.note && (
-        <div className="text-[11px] text-ink italic leading-tight mt-0.5">
-          &ldquo;{item.note}&rdquo;
-        </div>
-      )}
-    </div>
-  );
-}
-
-function LockedTile({ badge }: { badge: Badge }) {
-  const Icon = badgeIcon(badge.icon);
-
-  return (
-    <div className="flex flex-col items-center text-center gap-1.5 opacity-45">
-      <div className="relative w-14 h-14 rounded-full flex items-center justify-center border border-line bg-paper text-muted">
-        <Icon className="w-7 h-7" aria-hidden="true" />
-        <span className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-white dark:bg-portal-card border border-line flex items-center justify-center">
-          <Lock className="w-2.5 h-2.5 text-muted" aria-hidden="true" />
-        </span>
-      </div>
-      <div className="text-xs font-semibold text-ink leading-tight">{badge.name}</div>
-      <div className="text-[11px] text-muted leading-tight">{badge.description}</div>
-    </div>
-  );
-}
 
 export default function BadgeGrid({
   earned,
@@ -101,10 +65,23 @@ export default function BadgeGrid({
             <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-x-4 gap-y-5">
               {/* Earned first: the member's own wall, then what's left to chase. */}
               {group.earned.map((item) => (
-                <EarnedTile key={item.badge.id} item={item} />
+                <BadgeTile
+                  key={item.badge.id}
+                  badge={item.badge}
+                  earned
+                  note={item.note}
+                />
               ))}
               {group.locked.map((badge) => (
-                <LockedTile key={badge.id} badge={badge} />
+                <BadgeTile
+                  key={badge.id}
+                  badge={badge}
+                  earned={false}
+                  // The lock is a 10px icon at 45% opacity: unmistakable to a
+                  // sighted member scanning the wall and completely silent to a
+                  // screen reader without this.
+                  lockedLabel={t("lockedLabel")}
+                />
               ))}
             </div>
           </div>

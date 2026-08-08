@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import Modal from "@/components/ui/Modal";
-import { badgeIcon, TIER_STYLES } from "@/lib/badges";
+import { TIER_STYLES } from "@/lib/badges";
+import { BadgeMedal } from "@/components/member/BadgeMedal";
 import { markOwnBadgesSeen } from "@/lib/actions/portal";
 import type { EarnedBadge } from "@/lib/supabase/types";
 
@@ -34,8 +35,8 @@ export default function BadgeCelebration({ unseen }: { unseen: EarnedBadge[] }) 
   if (unseen.length === 0) return null;
 
   const current = unseen[index];
+  // Only for the tier NAME's colour below — the medal resolves its own colours.
   const tier = TIER_STYLES[current.badge.tier];
-  const Icon = badgeIcon(current.badge.icon);
   const isLast = index === unseen.length - 1;
 
   return (
@@ -46,12 +47,10 @@ export default function BadgeCelebration({ unseen }: { unseen: EarnedBadge[] }) 
       subtitle={unseen.length > 1 ? t("counter", { index: index + 1, total: unseen.length }) : undefined}
     >
       <div className="flex flex-col items-center text-center gap-3 py-2">
-        <div
-          className="w-24 h-24 rounded-full flex items-center justify-center border-2"
-          style={{ backgroundColor: tier.bg, borderColor: tier.fg, color: tier.fg }}
-        >
-          <Icon className="w-12 h-12" aria-hidden="true" />
-        </div>
+        {/* `xl` is exactly the 24/12 disc this modal always drew — the size scale
+            in BadgeMedal was derived from the four existing surfaces, not imposed
+            on them. */}
+        <BadgeMedal icon={current.badge.icon} tier={current.badge.tier} earned size="xl" />
 
         <div>
           <div className="font-display text-2xl text-black dark:text-ink">{current.badge.name}</div>

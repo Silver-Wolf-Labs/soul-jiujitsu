@@ -20,7 +20,8 @@ import {
 } from "@/lib/actions/membership-plans";
 import { promoteMember, addStripe, getBeltHistory, updateMemberBeltDetails } from "@/lib/actions/belt-history";
 import { type BeltEventType, BELT_EVENT_TYPES, labelForEvent } from "@/lib/belt-events";
-import { formatDate, formatDateTime, formatDateTimeTz, formatCents } from "@/lib/utils";
+import { formatDate, formatDateTime, formatDateTimeTz } from "@/lib/utils";
+import { formatColones, formatColonesWithSign, parseColonesToCents } from "@/lib/currency";
 import BeltEditor, { type BeltEditorValue } from "@/components/ui/BeltEditor";
 import BeltVisual from "@/components/ui/BeltVisual";
 import ConfirmModal from "@/components/ui/ConfirmModal";
@@ -417,7 +418,6 @@ function AssignPlanModal({
   const [isComp, setIsComp] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -433,34 +433,22 @@ function AssignPlanModal({
   }, []);
 
   const selectedPlan = plans.find((p) => p.id === selectedPlanId) ?? null;
-  // The plan is Stripe-ready from the DB's perspective when both IDs are
-  // present; the server action additionally checks that Stripe is
-  // configured at runtime, but we don't know that on the client, so we
-  // phrase the hint below as "may send a checkout link".
-  const stripeReadyPlan =
-    !!selectedPlan?.stripe_product_id && !!selectedPlan?.stripe_default_price_id;
 
   async function handleAssign() {
     if (!selectedPlanId) return;
     setSaving(true);
     setError(null);
-    setCheckoutUrl(null);
     try {
-      const result = await assignMembership({
+      // Always a direct insert now. There used to be a second branch here that
+      // returned a hosted-checkout URL for the admin to send to the member;
+      // payment is collected at the gym, so assignment is the only outcome.
+      await assignMembership({
         member_id: memberId,
         plan_id: selectedPlanId,
         started_at: startedAt ? new Date(startedAt).toISOString() : undefined,
         ends_at: endsAt ? new Date(endsAt).toISOString() : undefined,
         is_comp: isComp,
       });
-      // If Stripe is configured and the plan is synced, the server
-      // returned a hosted-checkout URL instead of inserting directly.
-      // Surface it so the admin can copy the link to the member.
-      if (result?.checkoutUrl) {
-        setCheckoutUrl(result.checkoutUrl);
-        onSaved();
-        return; // keep the modal open so the admin can grab the link
-      }
       onSaved();
       onClose();
     } catch (e) {
@@ -500,7 +488,7 @@ function AssignPlanModal({
                     <div>
                       <div className="text-sm font-semibold text-ink">{p.name}</div>
                       <div className="text-xs text-muted mt-0.5">
-                        {formatCents(p.price_cents)} / {p.billing_interval}
+                        {formatColonesWithSign(p.price_cents)} / {p.billing_interval}
                         {p.trial_days > 0 && ` · ${p.trial_days}-day trial`}
                         {p.max_classes_per_week && ` · ${p.max_classes_per_week} classes/wk max`}
                       </div>
@@ -531,8 +519,8 @@ function AssignPlanModal({
             </div>
           </div>
 
-          {/* Complimentary toggle — when on, the membership is assigned
-              directly at price $0 with no Stripe round-trip. */}
+          {/* Complimentary toggle — when on, the locked price is forced to ₡0
+              instead of the plan's. */}
           <label className="flex items-start gap-3 p-3 rounded-lg border border-line cursor-pointer">
             <input
               type="checkbox"
@@ -543,46 +531,20 @@ function AssignPlanModal({
             <div>
               <span className="text-sm font-medium text-ink">Complimentary (no charge)</span>
               <p className="text-xs text-muted mt-0.5">
-                Assigns the plan at $0. Use for staff, trials, or make-goods.
+                Assigns the plan at ₡0. Use for staff, trials, or make-goods.
               </p>
             </div>
           </label>
 
-          {/* What-will-happen hint — mirrors the server branches so the
-              admin isn't surprised. */}
+          {/* What-will-happen hint. It used to branch three ways on whether the
+              plan was synced to the processor; there is one outcome now, so the
+              only thing worth saying is that assigning doesn't collect. */}
           {selectedPlan && (
             <p className="text-xs text-muted bg-off-white border border-line rounded p-3">
               {isComp
-                ? "This plan will be assigned immediately at $0."
-                : stripeReadyPlan
-                  ? "If Stripe is configured, we'll create a checkout link for the member. Otherwise the plan will be assigned directly and you'll collect payment manually."
-                  : "This plan isn't linked to Stripe, so it will be assigned directly and you'll collect payment manually."}
+                ? "This plan will be assigned immediately at ₡0."
+                : `The plan will be assigned immediately at ${formatColonesWithSign(selectedPlan.price_cents)}. Collect payment in person — nothing is charged here.`}
             </p>
-          )}
-
-          {/* Checkout-link success card — shown when Stripe returns a
-              hosted-checkout URL. Admin copies the link to the member. */}
-          {checkoutUrl && (
-            <div className="p-3 rounded-lg border border-success-border bg-success-light text-sm text-success">
-              <p className="font-medium mb-1">Checkout link ready</p>
-              <p className="text-xs text-success/80 mb-2">
-                Send this link to the member to complete payment:
-              </p>
-              <input
-                type="text"
-                readOnly
-                value={checkoutUrl}
-                onFocus={(e) => e.currentTarget.select()}
-                className="w-full text-xs font-mono border border-success-border rounded px-2 py-1 bg-white"
-              />
-              <button
-                type="button"
-                onClick={() => navigator.clipboard?.writeText(checkoutUrl)}
-                className="mt-2 text-xs text-success underline hover:no-underline"
-              >
-                Copy to clipboard
-              </button>
-            </div>
           )}
         </div>
         <div className="px-4 sm:px-6 py-4 border-t border-line flex justify-end gap-3">
@@ -610,9 +572,12 @@ function OverridePriceForm({
   onSaved: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [overrideDollars, setOverrideDollars] = useState(
+  // Whole colones, no decimals: `.toFixed(2)` seeded the field with "79.00",
+  // which in es-CR grouping reads as seventy-nine *thousand*. formatColones
+  // gives the same string the rest of the app shows.
+  const [overrideColones, setOverrideColones] = useState(
     membership.override_price_cents != null
-      ? (membership.override_price_cents / 100).toFixed(2)
+      ? formatColones(membership.override_price_cents)
       : ""
   );
   const [note, setNote] = useState(membership.override_note ?? "");
@@ -622,8 +587,10 @@ function OverridePriceForm({
 
   async function handleSave() {
     if (!note.trim()) { setError("A note is required when setting an override price."); return; }
-    const cents = Math.round(parseFloat(overrideDollars) * 100);
-    if (isNaN(cents) || cents < 0) { setError("Enter a valid price."); return; }
+    // parseColonesToCents, not parseFloat: "40.000" would parse as 40 and lock
+    // in a ₡40 membership. See src/lib/currency.ts.
+    const cents = parseColonesToCents(overrideColones);
+    if (cents === null || cents < 0) { setError("Enter a valid price in colones."); return; }
     setSaving(true);
     setError(null);
     try {
@@ -667,14 +634,16 @@ function OverridePriceForm({
       {error && <p className="text-xs text-danger">{error}</p>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">Override Price ($)</label>
+          <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">Override Price (₡)</label>
+          {/* type="text", not "number": a number input rejects the grouping dot
+              in "40.000" in some locales and silently drops it in others. The
+              parse is ours anyway. */}
           <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={overrideDollars}
-            onChange={e => setOverrideDollars(e.target.value)}
-            placeholder="e.g. 79.00"
+            type="text"
+            inputMode="numeric"
+            value={overrideColones}
+            onChange={e => setOverrideColones(e.target.value)}
+            placeholder="e.g. 35000"
             className="w-full border border-line rounded px-3 py-2 text-sm focus:outline-none focus:border-black bg-white"
           />
         </div>
@@ -1434,16 +1403,16 @@ export default function MemberDetailPage() {
                             {m.ends_at && ` · Ends ${formatDate(m.ends_at)}`}
                           </p>
                           <p className="text-xs text-muted">
-                            Locked price: {formatCents(m.locked_price_cents)}
+                            Locked price: {formatColonesWithSign(m.locked_price_cents)}
                             {hasOverride && (
                               <span className="ml-2 text-yellow-dark">
-                                Override: {formatCents(effectivePrice)}
+                                Override: {formatColonesWithSign(effectivePrice)}
                                 {m.override_note && ` — ${m.override_note}`}
                               </span>
                             )}
                           </p>
                           <p className="text-xs font-semibold text-ink">
-                            Effective: {formatCents(effectivePrice)}
+                            Effective: {formatColonesWithSign(effectivePrice)}
                           </p>
                         </div>
                       </div>
@@ -1481,7 +1450,7 @@ export default function MemberDetailPage() {
                     </div>
                     <p className="text-xs text-muted mt-0.5">
                       {formatDate(m.started_at)} — {m.canceled_at ? formatDate(m.canceled_at) : "—"}
-                      {" "}· {formatCents(m.locked_price_cents)}
+                      {" "}· {formatColonesWithSign(m.locked_price_cents)}
                     </p>
                   </div>
                 ))}

@@ -75,15 +75,15 @@ Already set: `gymName` "Soul Jiu-Jitsu", `shortName` "Soul JJ", `logoText`
    `supabase/config.toml` has `project_id = "soul-jiujitsu"`.
 2. **Env vars.** Copy `.env.local.example` → `.env.local` and fill in.
    Required: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-   `SUPABASE_SERVICE_ROLE_KEY`, plus Stripe keys for billing.
-3. **Stripe.** New account, new products/prices. See
-   `STRIPE_INTEGRATION_DESIGN.md`, then `npx tsx scripts/stripe-sync.ts`.
-   Do not reuse MGD's Stripe objects.
-4. **Seed data (optional).** `supabase/seed.sql` holds demo schedule, team,
+   `SUPABASE_SERVICE_ROLE_KEY`. There are no payment-processor keys: the
+   profe collects payment in person, and the app only records which plan a
+   member is on. Plan prices are stored in `price_cents` and rendered in
+   colones by `src/lib/currency.ts`.
+3. **Seed data (optional).** `supabase/seed.sql` holds demo schedule, team,
    and blog rows. The instructor roster is now generic ("Guest Instructor")
    and the demo blog/news posts reference a "local open" rather than a real
    event — replace all of it with Soul JJ's actual content.
-5. **First admin user.** Supabase dashboard → Authentication → Users → Add
+4. **First admin user.** Supabase dashboard → Authentication → Users → Add
    user, then grant the admin role per `docs/runbook.md`.
 
 ---

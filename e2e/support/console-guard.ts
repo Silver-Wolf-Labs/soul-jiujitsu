@@ -91,7 +91,7 @@ export function watchForProblems(page: Page): PageProblem[] {
 
     // Browsers report a CSP violation as a console error. Splitting it into its
     // own kind matters because `next.config.mjs` builds the CSP by hand and a
-    // typo there silently breaks Stripe or Supabase in production only.
+    // typo there silently breaks Supabase or the map embed in production only.
     const kind = /Content Security Policy|Refused to (load|connect|execute)/i.test(text)
       ? "csp"
       : "console";

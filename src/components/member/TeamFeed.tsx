@@ -1,12 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Flame, CalendarCheck } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { Flame, CalendarCheck, Eye, EyeOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
 import { badgeIcon } from "@/lib/badges";
+import { leaderboardDisplayRanks } from "@/lib/leaderboard";
 import BeltVisual from "@/components/ui/BeltVisual";
-import { getTeamLeaderboard, getTeamActivity } from "@/lib/actions/portal";
+import {
+  getTeamLeaderboard,
+  getTeamActivity,
+  setOwnLeaderboardOptOut,
+} from "@/lib/actions/portal";
 import type { TeamMemberEntry, TeamActivityEntry } from "@/lib/supabase/types";
 
 /**
@@ -61,14 +66,21 @@ const POLL_INTERVAL_MS = 30_000;
 export default function TeamFeed({
   initialLeaderboard,
   initialActivity,
+  initialOptOut = false,
 }: {
   initialLeaderboard: TeamMemberEntry[];
   initialActivity: TeamActivityEntry[];
+  /**
+   * The viewer's own `leaderboard_opt_out`, server-rendered so the toggle's
+   * label is correct on first paint rather than flipping after a fetch.
+   */
+  initialOptOut?: boolean;
 }) {
   const t = useTranslations("portal.teamFeed");
   const [leaderboard, setLeaderboard] = useState(initialLeaderboard);
   const [activity, setActivity] = useState(initialActivity);
   const [tab, setTab] = useState<"ranking" | "activity">("ranking");
+  const [optOut, setOptOut] = useState(initialOptOut);
 
   // Held in a ref so the debounce timer survives re-renders without being part
   // of the effect's dependencies (which would tear down the subscription).
@@ -89,6 +101,49 @@ export default function TeamFeed({
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => void refresh(), REFRESH_DEBOUNCE_MS);
   }, [refresh]);
+
+  /**
+   * Leave or rejoin the ranking.
+   *
+   * Not optimistic. The rest of the panel is, in the sense that it shows stale
+   * data happily, but this control is a privacy statement: showing "oculto"
+   * before the write lands would tell a member they're hidden when they might not
+   * be. The pending state disables the button instead, and the stored value —
+   * returned by the action rather than assumed — is what gets rendered.
+   *
+   * The refetch afterwards is what makes the member's own row change appearance,
+   * since the rank numbering depends on whether they're hidden.
+   *
+   * `pending` is its own state rather than useTransition's `isPending`, matching
+   * SelfCheckInCard. On React 18 (this repo's version) an async function passed to
+   * startTransition stops being tracked at the first await, so isPending drops to
+   * false while the action is still in flight — which is precisely the window the
+   * button needs to stay disabled for. The transition is still there so the
+   * revalidatePath the action triggers is applied as a non-blocking update.
+   */
+  const [pending, setPending] = useState(false);
+  const [, startTransition] = useTransition();
+  const toggleOptOut = useCallback(() => {
+    setPending(true);
+    startTransition(async () => {
+      try {
+        const result = await setOwnLeaderboardOptOut(!optOut);
+        if ("error" in result) {
+          // Left as-is on purpose: the button still reads the true stored state,
+          // so a failed toggle looks like "nothing happened" and a retry is one
+          // tap. A banner over an ambient panel would be louder than the failure.
+          return;
+        }
+        setOptOut(result.optOut);
+        await refresh();
+      } finally {
+        // finally, not after the happy path: a thrown action (network drop mid
+        // request) would otherwise leave the button disabled with no way back
+        // except a page reload.
+        setPending(false);
+      }
+    });
+  }, [optOut, refresh]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -129,7 +184,14 @@ export default function TeamFeed({
       <div className="flex items-baseline justify-between mb-4">
         <h2 className="font-display text-xl text-black dark:text-ink">{t("heading")}</h2>
         <span className="text-sm text-muted">
-          {t("memberCount", { count: leaderboard.length })}
+          {/* Discount the viewer's own row while they're hidden, for the same
+              reason the ranks skip it: this is "how many people are on the
+              board", and theirs is the one row that is on nobody else's. */}
+          {t("memberCount", {
+            count: optOut
+              ? leaderboard.filter((m) => !m.is_self).length
+              : leaderboard.length,
+          })}
         </span>
       </div>
 
@@ -154,7 +216,38 @@ export default function TeamFeed({
       </div>
 
       {tab === "ranking" ? (
-        <Leaderboard rows={leaderboard} />
+        <>
+          <Leaderboard rows={leaderboard} selfHidden={optOut} />
+
+          {/* Bottom-right of the ranking panel, and only on this tab: it does
+              nothing to the activity feed, so offering it there would imply it
+              did. Below the list rather than beside the heading because the
+              heading is shared with the activity tab, and because a member looks
+              for this after reading the board, not before. */}
+          <div className="mt-3 pt-3 border-t border-line flex justify-end">
+            <button
+              type="button"
+              onClick={toggleOptOut}
+              disabled={pending}
+              // aria-pressed rather than a checkbox: it reads as "hidden: on" to
+              // a screen reader, which is the state, where a bare button label
+              // would only announce the action.
+              aria-pressed={optOut}
+              title={optOut ? t("optOutOnHint") : t("optOutOffHint")}
+              className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-ink transition-colors disabled:opacity-50 disabled:cursor-wait"
+            >
+              {optOut ? (
+                <EyeOff className="w-3.5 h-3.5" aria-hidden="true" />
+              ) : (
+                <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+              )}
+              {/* Reads as current state + the way out, e.g. "Estás oculto del
+                  ranking · Mostrarme". A label that only said "Mostrarme" would
+                  leave the member guessing which state they're in. */}
+              {optOut ? t("optOutOn") : t("optOutOff")}
+            </button>
+          </div>
+        </>
       ) : (
         <ActivityList rows={activity} />
       )}
@@ -162,12 +255,23 @@ export default function TeamFeed({
   );
 }
 
-function Leaderboard({ rows }: { rows: TeamMemberEntry[] }) {
+function Leaderboard({
+  rows,
+  selfHidden,
+}: {
+  rows: TeamMemberEntry[];
+  selfHidden: boolean;
+}) {
   const t = useTranslations("portal.teamFeed");
 
   if (rows.length === 0) {
     return <p className="text-sm text-muted">{t("noTeammates")}</p>;
   }
+
+  // Not `i + 1`: a hidden member's own row is in this list and in nobody else's,
+  // so positional numbering would show them ranks one off from what the rest of
+  // the gym sees. See leaderboardDisplayRanks.
+  const ranks = leaderboardDisplayRanks(rows, selfHidden);
 
   return (
     <ol className="divide-y divide-line">
@@ -181,7 +285,12 @@ function Leaderboard({ rows }: { rows: TeamMemberEntry[] }) {
             m.is_self ? "bg-yellow-light -mx-2 px-2 rounded" : ""
           }`}
         >
-          <span className="w-6 shrink-0 text-center text-xs font-mono text-muted">{i + 1}</span>
+          {/* A dash, not a number, for a hidden viewer's own row: they hold no
+              rank on the board the gym sees, and inventing one would be a number
+              they could quote at someone who sees a different one. */}
+          <span className="w-6 shrink-0 text-center text-xs font-mono text-muted">
+            {ranks[i] ?? "–"}
+          </span>
 
           {/* BeltVisual falls back to white for an unrecognised colour on its
               own, so the raw column value goes straight in. */}
@@ -192,6 +301,12 @@ function Leaderboard({ rows }: { rows: TeamMemberEntry[] }) {
               {/* The member's own display name — theirs, so it renders as stored. */}
               {m.display_name}
               {m.is_self && <span className="ml-1.5 text-[11px] font-normal text-muted">{t("you")}</span>}
+              {/* Says out loud that this row is theirs alone. Without it, a
+                  hidden member sees themselves on the board and reasonably
+                  concludes the toggle didn't work. */}
+              {m.is_self && selfHidden && (
+                <span className="ml-1.5 text-[11px] font-normal text-muted">{t("hiddenTag")}</span>
+              )}
             </span>
             <span className="block text-xs text-muted">
               {t("levelAndXp", { level: m.level, xp: m.xp_total })}

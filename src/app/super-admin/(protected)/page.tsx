@@ -8,10 +8,7 @@ function envStatus(): { key: string; set: boolean; hint?: string }[] {
     { key: "NEXT_PUBLIC_SUPABASE_URL", set: !!process.env.NEXT_PUBLIC_SUPABASE_URL },
     { key: "NEXT_PUBLIC_SUPABASE_ANON_KEY", set: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY },
     { key: "SUPABASE_SERVICE_ROLE_KEY", set: !!process.env.SUPABASE_SERVICE_ROLE_KEY },
-    { key: "STRIPE_SECRET_KEY", set: !!process.env.STRIPE_SECRET_KEY },
-    { key: "STRIPE_WEBHOOK_SECRET", set: !!process.env.STRIPE_WEBHOOK_SECRET },
     { key: "NEXT_PUBLIC_SITE_URL", set: !!process.env.NEXT_PUBLIC_SITE_URL },
-    { key: "STRIPE_CURRENCY", set: !!process.env.STRIPE_CURRENCY, hint: process.env.STRIPE_CURRENCY || "usd (default)" },
     { key: "SUPER_ADMIN_PASSWORD", set: !!process.env.SUPER_ADMIN_PASSWORD },
   ];
 }

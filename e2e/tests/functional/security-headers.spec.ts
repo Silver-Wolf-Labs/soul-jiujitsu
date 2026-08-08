@@ -4,8 +4,8 @@ import { test, expect } from "../../support/fixtures";
  * Security headers and cache behaviour.
  *
  * `next.config.mjs` builds the CSP as a hand-assembled string. That is exactly
- * the kind of code where a dropped directive breaks Stripe checkout or Supabase
- * auth in production while everything looks fine locally — nothing type-checks
+ * the kind of code where a dropped directive breaks Supabase auth or the map
+ * embed in production while everything looks fine locally — nothing type-checks
  * a CSP. These specs assert the header is present and still contains the
  * origins the app depends on.
  *
@@ -80,10 +80,7 @@ test.describe("security headers", () => {
     // rather than just "CSP changed".
     const required: { fragment: string; breaks: string }[] = [
       { fragment: "supabase.co", breaks: "all auth and data loading" },
-      { fragment: "js.stripe.com", breaks: "the Stripe payment form" },
-      { fragment: "api.stripe.com", breaks: "Stripe API calls from the browser" },
-      { fragment: "checkout.stripe.com", breaks: "Stripe Checkout redirect" },
-      { fragment: "billing.stripe.com", breaks: "the Stripe billing portal" },
+      { fragment: "wss://*.supabase.co", breaks: "the portal team feed's live updates" },
       { fragment: "maps.google.com", breaks: "the location map embed" },
     ];
 
@@ -95,6 +92,21 @@ test.describe("security headers", () => {
         broken.map((b) => `  - ${b.fragment} → breaks ${b.breaks}`).join("\n") +
         `\nCurrent CSP:\n  ${csp}`
     ).toHaveLength(0);
+  });
+
+  test("CSP no longer allows a third-party payment origin", async ({ request }) => {
+    const response = await request.get("/");
+    const csp = response.headers()["content-security-policy"] ?? "";
+
+    // The payment integration was removed — the gym collects payment in person.
+    // Nothing should load, frame, or connect to a payment processor, so an
+    // allowance reappearing here means either the integration came back without
+    // this test being updated, or a copy-paste widened the policy for nothing.
+    expect(
+      csp.includes("stripe.com"),
+      `The CSP allows stripe.com again:\n  ${csp}\n` +
+        `There is no payment integration; this only widens what the page may load.`
+    ).toBe(false);
   });
 
   test("CSP has not regained unsafe-eval", async ({ request }) => {

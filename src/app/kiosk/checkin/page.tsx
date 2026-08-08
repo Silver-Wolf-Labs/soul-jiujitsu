@@ -12,15 +12,21 @@ import {
   getKioskMemberStats,
   getGymRankings,
   getKioskUnlockStatus,
+  getKioskMemberBadges,
+  getKioskTrackedBadge,
   type KioskMember,
   type KioskClass,
   type KioskMemberStats,
   type GymRankings,
   type AwardedBadge,
+  type KioskBadges,
 } from "@/lib/actions/check-ins";
-import { badgeIcon, TIER_STYLES } from "@/lib/badges";
+import { TIER_STYLES } from "@/lib/badges";
+import type { TrackedBadgeState } from "@/lib/badge-progress";
 import BeltVisual from "@/components/ui/BeltVisual";
 import StatsTilesGrid from "@/components/member/StatsTilesGrid";
+import { BadgeMedal } from "@/components/member/BadgeMedal";
+import KioskBadgePanel from "@/components/kiosk/KioskBadgePanel";
 import Spinner from "@/components/ui/Spinner";
 import PinPad from "@/components/kiosk/PinPad";
 import { useGymProfile } from "@/lib/gym-profile-context";
@@ -91,6 +97,18 @@ function Clock() {
 
 type Step = "lookup" | "confirm" | "profile" | "class" | "success" | "undone" | "error";
 
+/**
+ * The two halves of the profile step.
+ *
+ * A tab rather than a longer card: the profile step is already at the limit of a
+ * 768px-tall tablet — belt, four stat tiles, last class and the yellow Check In
+ * button, which must stay above the fold or the device's primary action vanishes.
+ * Appending a badge wall to that would push the button off screen on exactly the
+ * hardware this runs on. So badges get their own surface, and "Check In" stays put
+ * underneath both.
+ */
+type ProfileTab = "stats" | "badges";
+
 
 export default function KioskCheckinPage() {
   const router = useRouter();
@@ -106,6 +124,15 @@ export default function KioskCheckinPage() {
   const [memberStats, setMemberStats] = useState<KioskMemberStats | null>(null);
   const [gymRankings, setGymRankings] = useState<GymRankings | null>(null);
   const [todayCheckedIn, setTodayCheckedIn] = useState<string[]>([]);
+  // ── Badges tab ──
+  // Loaded lazily, the first time the member opens the tab: 30 catalogue rows plus
+  // a progress RPC is real latency, and paying it on every profile view would slow
+  // down the check-in that is the whole point of the device. `badgesLoading`
+  // distinguishes "not asked yet" from "asked and empty".
+  const [profileTab, setProfileTab] = useState<ProfileTab>("stats");
+  const [badges, setBadges]       = useState<KioskBadges | null>(null);
+  const [trackedBadge, setTrackedBadge] = useState<TrackedBadgeState | null>(null);
+  const [badgesLoading, setBadgesLoading] = useState(false);
   const [busy, setBusy]           = useState(false);
   const [loadingMemberId, setLoadingMemberId] = useState<number | null>(null);
   const [locking, setLocking]     = useState(false);
@@ -177,6 +204,9 @@ export default function KioskCheckinPage() {
     setSelected(null); setPickedClass(null); setRestrictionWarning(null); setBusy(false); setLoadingMemberId(null); setMsg("");
     setMemberStats(null); setGymRankings(null); setTodayCheckedIn([]);
     setLastCheckInId(null); setUndoing(false); setAwardedBadges([]);
+    // Badge state is per-member and this is a SHARED device: leaving it behind
+    // would show the next person in line the previous member's badges and goal.
+    setProfileTab("stats"); setBadges(null); setTrackedBadge(null); setBadgesLoading(false);
   }, []);
 
   // Auto-reset after success/undone. Undone gets a shorter dwell because
@@ -289,6 +319,33 @@ export default function KioskCheckinPage() {
   function handleProfileContinue() {
     if (classes.length === 1) setPickedClass(classes[0]);
     setStep("class");
+  }
+
+  /**
+   * Opens the badges tab, fetching on first open only.
+   *
+   * Failure is silent and non-fatal by design: the panel renders its own empty
+   * state, and a badge wall that didn't load must never stop somebody checking in.
+   * Guarded on `badges` rather than a "fetched" flag so a failed load retries when
+   * the member taps back — the retry is free and the alternative is a tab that is
+   * permanently blank until the device is reset.
+   */
+  async function handleOpenBadges() {
+    setProfileTab("badges");
+    if (!selected || badges || badgesLoading) return;
+    setBadgesLoading(true);
+    try {
+      const [b, tracked] = await Promise.all([
+        getKioskMemberBadges(selected.id),
+        getKioskTrackedBadge(selected.id),
+      ]);
+      setBadges(b);
+      setTrackedBadge(tracked);
+    } catch (err) {
+      console.warn("[kiosk] Failed to load badges:", err);
+      setBadges({ earned: [], locked: [] });
+    }
+    setBadgesLoading(false);
   }
 
   async function handleCheckIn() {
@@ -489,64 +546,109 @@ export default function KioskCheckinPage() {
               Tighter margins across the board so the yellow primary button
               never lands under the tablet fold. */}
           {step === "profile" && selected && (
-            <div className="flex-1 flex flex-col items-center justify-center px-4 md:px-8 py-3 overflow-hidden">
-              <div className="w-full max-w-sm flex flex-col items-center">
-                {/* Avatar — slightly smaller than before so the whole card fits 768px tall. */}
-                <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center font-display text-2xl text-white mb-2">
-                  {initials(selected)}
+            <div className="flex-1 flex flex-col items-center px-4 md:px-8 py-3 overflow-hidden">
+              {/* Push/pull column: identity and the Check In button are pinned, only
+                  the middle section changes with the tab. `justify-center` on the
+                  stats tab preserves the centred card this step has always been;
+                  the badges tab fills instead, because its content scrolls.
+                  Wider on the badges tab — 3 medal columns want more than 24rem. */}
+              <div
+                className={`w-full flex flex-col flex-1 min-h-0 items-center ${
+                  profileTab === "badges" ? "max-w-md" : "max-w-sm justify-center"
+                }`}
+              >
+                <div className="flex-shrink-0 flex flex-col items-center w-full">
+                  {/* Avatar — slightly smaller than before so the whole card fits 768px tall. */}
+                  <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center font-display text-2xl text-white mb-2">
+                    {initials(selected)}
+                  </div>
+                  <h1 className="text-xl md:text-2xl font-display text-white mb-0.5">
+                    {selected.first_name} {selected.last_name}
+                  </h1>
                 </div>
-                <h1 className="text-xl md:text-2xl font-display text-white mb-0.5">
-                  {selected.first_name} {selected.last_name}
-                </h1>
 
-                {/* Belt */}
-                {memberStats && (
-                  <div className="w-full mt-2 mb-3 px-4">
-                    <BeltVisual
-                      belt={memberStats.belt ?? "white"}
-                      stripes={memberStats.stripes ?? 0}
-                      className="w-full max-w-[15rem] mx-auto"
-                      backdrop
+                {/* Tab toggle — `py-3` rather than the portal's `py-1.5`: this is a
+                    wall-mounted touchscreen, so the targets are thumb-sized. */}
+                <div className="flex-shrink-0 flex w-full rounded-xl bg-white/5 p-1 mt-3 mb-3">
+                  {([
+                    { id: "stats" as const,  label: "Stats" },
+                    { id: "badges" as const, label: "Badges" },
+                  ]).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => (tab.id === "badges" ? handleOpenBadges() : setProfileTab("stats"))}
+                      className={`flex-1 py-3 rounded-lg text-base font-semibold transition-all ${
+                        profileTab === tab.id
+                          ? "bg-white/15 text-white"
+                          : "text-white/35 hover:text-white/60"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {profileTab === "stats" && (
+                  <>
+                    {/* Belt */}
+                    {memberStats && (
+                      <div className="w-full mb-3 px-4">
+                        <BeltVisual
+                          belt={memberStats.belt ?? "white"}
+                          stripes={memberStats.stripes ?? 0}
+                          className="w-full max-w-[15rem] mx-auto"
+                          backdrop
+                        />
+                        <p className="text-center text-white/35 text-[11px] mt-1.5 capitalize tracking-wide">
+                          {memberStats.belt} belt
+                          {memberStats.stripes > 0 && ` · ${memberStats.stripes} ${memberStats.stripes === 1 ? "stripe" : "stripes"}`}
+                        </p>
+                        {gymTenure(memberStats.joined_at) && (
+                          <p className="text-center text-white/25 text-[11px] mt-0.5 tracking-wide">
+                            Member of {profile.shortName} for {gymTenure(memberStats.joined_at)}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {!memberStats && <div className="mb-3" />}
+
+                    {/* Stats tiles */}
+                    <StatsTilesGrid
+                      memberStats={memberStats}
+                      gymRankings={gymRankings}
+                      variant="dark"
+                      className="w-full mb-3"
                     />
-                    <p className="text-center text-white/35 text-[11px] mt-1.5 capitalize tracking-wide">
-                      {memberStats.belt} belt
-                      {memberStats.stripes > 0 && ` · ${memberStats.stripes} ${memberStats.stripes === 1 ? "stripe" : "stripes"}`}
-                    </p>
-                    {gymTenure(memberStats.joined_at) && (
-                      <p className="text-center text-white/25 text-[11px] mt-0.5 tracking-wide">
-                        Member of {profile.shortName} for {gymTenure(memberStats.joined_at)}
+
+                    {/* Last class */}
+                    {memberStats?.last_class_name && (
+                      <p className="text-white/30 text-[11px] mb-3 text-center">
+                        Last class: <span className="text-white/50">{memberStats.last_class_name}</span>
+                        {" · "}{new Date(memberStats.last_class_date!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </p>
                     )}
-                  </div>
-                )}
-                {!memberStats && <div className="mb-3" />}
-
-                {/* Stats tiles */}
-                <StatsTilesGrid
-                  memberStats={memberStats}
-                  gymRankings={gymRankings}
-                  variant="dark"
-                  className="w-full mb-3"
-                />
-
-                {/* Last class */}
-                {memberStats?.last_class_name && (
-                  <p className="text-white/30 text-[11px] mb-3 text-center">
-                    Last class: <span className="text-white/50">{memberStats.last_class_name}</span>
-                    {" · "}{new Date(memberStats.last_class_date!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  </p>
+                  </>
                 )}
 
-                <button
-                  onClick={handleProfileContinue}
-                  disabled={busy}
-                  className="w-full h-12 md:h-14 rounded-2xl bg-yellow text-black font-bold text-base md:text-lg tracking-wide transition-all active:scale-95 disabled:opacity-30"
-                >
-                  Check In
-                </button>
-                <button onClick={reset} className="mt-2 text-white/30 hover:text-white/60 text-sm transition-colors">
-                  Not me
-                </button>
+                {profileTab === "badges" && (
+                  <KioskBadgePanel badges={badges} tracked={trackedBadge} loading={badgesLoading} />
+                )}
+
+                {/* Pinned footer: whichever tab is open, checking in stays one tap
+                    away and above the fold. */}
+                <div className="flex-shrink-0 w-full pt-3">
+                  <button
+                    onClick={handleProfileContinue}
+                    disabled={busy}
+                    className="w-full h-12 md:h-14 rounded-2xl bg-yellow text-black font-bold text-base md:text-lg tracking-wide transition-all active:scale-95 disabled:opacity-30"
+                  >
+                    Check In
+                  </button>
+                  <button onClick={reset} className="mt-2 w-full text-white/30 hover:text-white/60 text-sm transition-colors">
+                    Not me
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -721,19 +823,21 @@ export default function KioskCheckinPage() {
                     </p>
                     <div className="flex flex-col gap-2.5">
                       {awardedBadges.map((b) => {
-                        const Icon = badgeIcon(b.badge_icon);
+                        // TIER_STYLES is still read here for the tier NAME's colour;
+                        // the medal resolves its own.
                         const tier = TIER_STYLES[b.badge_tier];
                         return (
                           <div
                             key={b.badge_slug}
                             className="flex items-center gap-3 px-4 py-3 rounded-lg bg-white/[0.06] border border-white/10"
                           >
-                            <span
-                              className="w-11 h-11 flex-none rounded-full flex items-center justify-center border-2"
-                              style={{ backgroundColor: tier.bg, borderColor: tier.fg, color: tier.fg }}
-                            >
-                              <Icon className="w-6 h-6" aria-hidden="true" />
-                            </span>
+                            <BadgeMedal
+                              icon={b.badge_icon}
+                              tier={b.badge_tier}
+                              earned
+                              size="sm"
+                              surface="dark"
+                            />
                             <span className="text-left min-w-0">
                               <span className="block font-display text-lg text-white leading-tight">
                                 {b.badge_name}

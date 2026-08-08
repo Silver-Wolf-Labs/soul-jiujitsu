@@ -27,9 +27,13 @@ const nextConfig = {
     const rumRegion = process.env.NEXT_PUBLIC_CW_RUM_REGION || "us-east-1";
     const csp = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://js.stripe.com",
+      // The payment processor's js.stripe.com is gone from script-src, and its
+      // *.stripe.com from img-src, along with the integration itself — the gym
+      // collects payment in person. Nothing loads from a third-party payment
+      // origin now, so authorizing one would only widen the attack surface.
+      "script-src 'self' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://*.supabase.co https://*.stripe.com",
+      "img-src 'self' data: blob: https://*.supabase.co",
       "font-src 'self'",
       [
         "connect-src 'self'",
@@ -43,14 +47,16 @@ const nextConfig = {
         // rather than crashing — but it does mean this is easy to break without
         // anyone noticing except the report endpoint.
         "wss://*.supabase.co",
-        "https://api.stripe.com",
         // CloudWatch RUM: sessions ingest via the dataplane, guest
         // credentials via Cognito identity pools + STS.
         `https://dataplane.rum.${rumRegion}.amazonaws.com`,
         `https://cognito-identity.${rumRegion}.amazonaws.com`,
         `https://sts.${rumRegion}.amazonaws.com`,
       ].join(" "),
-      "frame-src 'self' https://maps.google.com https://*.google.com https://js.stripe.com https://checkout.stripe.com https://billing.stripe.com",
+      // Google Maps only. The three payment-processor frame origins (the card
+      // element, hosted checkout, hosted billing portal) had nothing left to
+      // frame once those flows were removed.
+      "frame-src 'self' https://maps.google.com https://*.google.com",
       "frame-ancestors 'none'",
       "report-uri /api/csp-report",
     ].join("; ");

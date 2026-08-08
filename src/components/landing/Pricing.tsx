@@ -7,6 +7,7 @@ import {
   HIGHLIGHT_TEXT_COLOR,
   HIGHLIGHT_BORDER_HEX,
 } from "@/lib/pricing-colors";
+import { formatColones } from "@/lib/currency";
 import type { MembershipPlan, Banner } from "@/lib/supabase/types";
 
 interface SectionConfig { display_title: string | null; display_subtitle: string | null; }
@@ -17,13 +18,6 @@ function formatPeriod(plan: MembershipPlan): string {
   if (plan.billing_interval === "month") return "/mes";
   if (plan.billing_interval === "year")  return "/año";
   return "pago único";
-}
-
-/** ₡ amounts with dot thousand separators — 4000000 cents → "40.000" */
-function formatColones(cents: number): string {
-  return Math.floor(cents / 100)
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
 export default async function Pricing({ sectionConfig }: Props) {
