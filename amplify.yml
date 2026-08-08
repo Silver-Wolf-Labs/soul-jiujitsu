@@ -3,8 +3,9 @@ frontend:
   phases:
     preBuild:
       commands:
-        - nvm install 20
-        - nvm use 20
+        # Node 22 to match "engines": { "node": ">=22" } in package.json.
+        - nvm install 22
+        - nvm use 22
         # npm install (not ci): the lockfile omits top-level entries for
         # Linux-only optional deps like @emnapi/* pulled in by
         # @rolldown/binding-wasm32-wasi, because we generate it on macOS.
@@ -13,7 +14,10 @@ frontend:
         - npm install --no-audit --no-fund
     build:
       commands:
-        - env | grep -E '^(NEXT_PUBLIC_|SUPABASE_SERVICE_ROLE_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|CRON_SECRET|NODE_ENV)' > .env.production
+        # `|| true`: grep exits 1 when nothing matches, which would fail the
+        # whole build. Missing vars are caught by validateEnv() in src/lib/env.ts
+        # with a readable error instead of an opaque "exit code 1" here.
+        - env | grep -E '^(NEXT_PUBLIC_|SUPABASE_SERVICE_ROLE_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|CRON_SECRET|NODE_ENV)' > .env.production || true
         - npm run build
   artifacts:
     baseDirectory: .next
