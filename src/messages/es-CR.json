@@ -93,6 +93,7 @@
       "alreadyCheckedIn": "Ya marcaste asistencia a esta clase hoy.",
       "checkInFailed": "No pudimos registrar tu asistencia. Intentá de nuevo o avisale a alguien en la recepción.",
       "badgeNotTrackable": "Ese logro no se puede seguir como objetivo.",
+      "alreadyTrackingMax": "Ya estás siguiendo 3 objetivos. Quitá uno para agregar otro.",
       "generic": "Algo salió mal. Intentá de nuevo."
     },
     "belt": {
@@ -198,12 +199,15 @@
       }
     },
     "tracker": {
-      "heading": "Tu objetivo",
-      "emptyTitle": "Todavía no elegís objetivo",
-      "emptyBody": "Elegí un logro y te vamos contando cuánto te falta.",
+      "heading": "Tus objetivos",
+      "emptyTitle": "Todavía no elegís objetivos",
+      "emptyBody": "Elegí hasta 3 logros y te vamos contando cuánto te falta para cada uno.",
       "choose": "Elegir objetivo",
-      "change": "Cambiar",
+      "add": "Agregar otro",
+      "full": "Ya estás siguiendo 3 objetivos. Quitá uno para agregar otro.",
       "clear": "Quitar",
+      "clearOne": "Quitar {name} de tus objetivos",
+      "slots": "{used}/{max}",
       "countClasses": "{current} de {target} clases",
       "countDays": "{current} de {target} días",
       "remainingClasses": "{count, plural, one {falta # clase} other {faltan # clases}}",
@@ -212,11 +216,11 @@
       "milestonePending": "Todavía no — seguí así.",
       "manual": "Este lo entrega el profe a mano.",
       "progressLabel": "{current} de {target}",
-      "pickerTitle": "Elegí tu objetivo",
-      "pickerSubtitle": "Uno a la vez. Podés cambiarlo cuando querás.",
+      "pickerTitle": "Elegí tus objetivos",
+      "pickerSubtitle": "{remaining, plural, one {Te queda # espacio} other {Te quedan # espacios}}. Podés cambiarlos cuando querás.",
       "pickerEmpty": "Ya tenés todos los logros automáticos. ¡Bestia!",
       "loadFailed": "No pudimos cargar los logros. Intentá de nuevo.",
-      "saveFailed": "No pudimos guardar tu objetivo. Intentá de nuevo."
+      "saveFailed": "No pudimos guardar tus objetivos. Intentá de nuevo."
     },
     "teamFeed": {
       "heading": "El equipo",

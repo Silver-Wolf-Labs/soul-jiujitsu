@@ -9,7 +9,7 @@ import { SETTINGS_KEYS } from "@/lib/settings-keys";
 import { gymToday, gymPgDay } from "@/lib/gym-time";
 import { parseUnlockGrace, UNLOCK_GRACE_MS, type KioskUnlockGrace } from "@/lib/kiosk-ui-config";
 import { writeCheckIn, type WriteCheckInResult } from "@/lib/check-in-core";
-import { badgeProgress, type TrackedBadgeState } from "@/lib/badge-progress";
+import { badgeProgress, type TrackedBadgeEntry } from "@/lib/badge-progress";
 import type { Badge, EarnedBadge } from "@/lib/supabase/types";
 
 // Re-exported for the kiosk components that already import it from here.
@@ -702,42 +702,61 @@ export async function getKioskMemberBadges(memberId: number): Promise<KioskBadge
 }
 
 /**
- * The member's chosen objective and how far along it is, for the kiosk tab.
+ * The member's chosen objectives (up to three) and how far along each is, for the
+ * kiosk tab.
  *
- * Reads the same member_badge_progress RPC the portal does, so the bar on the
- * tablet and the bar on the member's phone cannot disagree.
+ * Reads the same member_badge_progress RPC the portal does, so the bars on the
+ * tablet and the bars on the member's phone cannot disagree.
  *
- * Never throws: a member with no goal, a pre-migration database and a failed RPC
+ * Ordered by `created_at` to match the portal — slots are reused, so ordering by
+ * slot would show the same three goals in a different order on the two surfaces.
+ *
+ * Never throws: a member with no goals, a pre-migration database and a failed RPC
  * all resolve to something renderable. This is a lazily-loaded tab on a kiosk that
- * must not break the check-in flow — the primary path — over a decoration.
+ * must not break the check-in flow — the primary path — over a decoration. Read
+ * only: picking goals happens in the portal, because the kiosk knows who is
+ * standing at it from four digits of a phone number.
  */
-export async function getKioskTrackedBadge(memberId: number): Promise<TrackedBadgeState> {
+export async function getKioskTrackedBadges(memberId: number): Promise<TrackedBadgeEntry[]> {
   await requireKioskSession();
   const supabase = kioskClient();
 
   try {
-    const { data: row, error } = await supabase
-      .from("members")
-      .select(`tracked_badge_id, badges!members_tracked_badge_id_fkey (${KIOSK_BADGE_FIELDS})`)
-      .eq("id", memberId)
-      .maybeSingle();
+    const { data: rows, error } = await supabase
+      .from("member_tracked_badges")
+      .select(`badge_id, badges!member_tracked_badges_badge_id_fkey (${KIOSK_BADGE_FIELDS})`)
+      .eq("member_id", memberId)
+      .order("created_at");
     if (error) throw new Error(error.message);
 
-    const badge = (row?.badges as unknown as Badge | null) ?? null;
-    if (!badge) return { badge: null, progress: { kind: "manual" } };
+    const badges = (rows ?? [])
+      .map((r) => (r as unknown as { badges: Badge | null }).badges)
+      .filter((b): b is Badge => b !== null);
+    if (badges.length === 0) return [];
 
     const today = await gymToday();
-    const { data: progressRows, error: progressError } = await supabase.rpc("member_badge_progress", {
-      p_member_id: memberId,
-      p_badge_id: badge.id,
-      p_today: today,
-    });
-    if (progressError) throw new Error(progressError.message);
 
-    return { badge, progress: badgeProgress(progressRows?.[0] ?? null) };
+    return await Promise.all(
+      badges.map(async (badge) => {
+        const { data: progressRows, error: progressError } = await supabase.rpc(
+          "member_badge_progress",
+          { p_member_id: memberId, p_badge_id: badge.id, p_today: today }
+        );
+        // Unlike the outer catch, one failed rule loses one bar rather than the
+        // whole tab: the medal and the name are still worth showing.
+        if (progressError) {
+          console.warn(
+            `[getKioskTrackedBadges] progress failed for badge ${badge.id}:`,
+            progressError.message
+          );
+          return { badge, progress: { kind: "indeterminate", ruleKind: null } as const };
+        }
+        return { badge, progress: badgeProgress(progressRows?.[0] ?? null) };
+      })
+    );
   } catch (e) {
-    console.warn("[getKioskTrackedBadge] falling back to no goal:", e);
-    return { badge: null, progress: { kind: "manual" } };
+    console.warn("[getKioskTrackedBadges] falling back to no goals:", e);
+    return [];
   }
 }
 

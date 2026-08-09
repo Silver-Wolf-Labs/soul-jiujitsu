@@ -13,7 +13,7 @@ import {
   getGymRankings,
   getKioskUnlockStatus,
   getKioskMemberBadges,
-  getKioskTrackedBadge,
+  getKioskTrackedBadges,
   type KioskMember,
   type KioskClass,
   type KioskMemberStats,
@@ -22,7 +22,7 @@ import {
   type KioskBadges,
 } from "@/lib/actions/check-ins";
 import { TIER_STYLES } from "@/lib/badges";
-import type { TrackedBadgeState } from "@/lib/badge-progress";
+import type { TrackedBadgeEntry } from "@/lib/badge-progress";
 import BeltVisual from "@/components/ui/BeltVisual";
 import StatsTilesGrid from "@/components/member/StatsTilesGrid";
 import { BadgeMedal } from "@/components/member/BadgeMedal";
@@ -131,7 +131,7 @@ export default function KioskCheckinPage() {
   // distinguishes "not asked yet" from "asked and empty".
   const [profileTab, setProfileTab] = useState<ProfileTab>("stats");
   const [badges, setBadges]       = useState<KioskBadges | null>(null);
-  const [trackedBadge, setTrackedBadge] = useState<TrackedBadgeState | null>(null);
+  const [trackedBadges, setTrackedBadges] = useState<TrackedBadgeEntry[] | null>(null);
   const [badgesLoading, setBadgesLoading] = useState(false);
   const [busy, setBusy]           = useState(false);
   const [loadingMemberId, setLoadingMemberId] = useState<number | null>(null);
@@ -206,7 +206,7 @@ export default function KioskCheckinPage() {
     setLastCheckInId(null); setUndoing(false); setAwardedBadges([]);
     // Badge state is per-member and this is a SHARED device: leaving it behind
     // would show the next person in line the previous member's badges and goal.
-    setProfileTab("stats"); setBadges(null); setTrackedBadge(null); setBadgesLoading(false);
+    setProfileTab("stats"); setBadges(null); setTrackedBadges(null); setBadgesLoading(false);
   }, []);
 
   // Auto-reset after success/undone. Undone gets a shorter dwell because
@@ -337,10 +337,10 @@ export default function KioskCheckinPage() {
     try {
       const [b, tracked] = await Promise.all([
         getKioskMemberBadges(selected.id),
-        getKioskTrackedBadge(selected.id),
+        getKioskTrackedBadges(selected.id),
       ]);
       setBadges(b);
-      setTrackedBadge(tracked);
+      setTrackedBadges(tracked);
     } catch (err) {
       console.warn("[kiosk] Failed to load badges:", err);
       setBadges({ earned: [], locked: [] });
@@ -632,7 +632,7 @@ export default function KioskCheckinPage() {
                 )}
 
                 {profileTab === "badges" && (
-                  <KioskBadgePanel badges={badges} tracked={trackedBadge} loading={badgesLoading} />
+                  <KioskBadgePanel badges={badges} tracked={trackedBadges} loading={badgesLoading} />
                 )}
 
                 {/* Pinned footer: whichever tab is open, checking in stays one tap

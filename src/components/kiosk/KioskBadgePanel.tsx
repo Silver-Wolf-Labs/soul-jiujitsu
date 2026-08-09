@@ -4,7 +4,7 @@ import { BadgeTile } from "@/components/member/BadgeMedal";
 import BadgeTracker from "@/components/member/BadgeTracker";
 import Spinner from "@/components/ui/Spinner";
 import type { KioskBadges } from "@/lib/actions/check-ins";
-import type { TrackedBadgeState } from "@/lib/badge-progress";
+import type { TrackedBadgeEntry } from "@/lib/badge-progress";
 
 /**
  * The kiosk's badges tab: the member's goal on top, their wall underneath.
@@ -31,7 +31,8 @@ export default function KioskBadgePanel({
   loading,
 }: {
   badges: KioskBadges | null;
-  tracked: TrackedBadgeState | null;
+  /** Up to three goals, oldest first. `null` while the tab is still loading. */
+  tracked: TrackedBadgeEntry[] | null;
   loading: boolean;
 }) {
   if (loading || !badges) {
@@ -51,16 +52,20 @@ export default function KioskBadgePanel({
       {tracked && (
         <div className="rounded-2xl bg-white/5 px-4 py-4 mb-4">
           <BadgeTracker
-            badge={tracked.badge}
-            progress={tracked.progress}
+            tracked={tracked}
             variant="dark"
             labels={{
-              heading: "Your goal",
+              heading: tracked.length === 1 ? "Your goal" : "Your goals",
               // Read-only here: the kiosk knows who you are from four digits of a
               // phone number, which is not an identity to store preferences
-              // against. Picking a goal happens in the portal.
-              emptyTitle: "No goal picked yet",
-              emptyBody: "Pick a badge in your member portal and it shows up here.",
+              // against. Picking goals happens in the portal — so no `actions` and
+              // no `rowActions`.
+              emptyTitle: "No goals picked yet",
+              emptyBody: "Pick up to 3 badges in your member portal and they show up here.",
+              // Suppressed at one goal: "1/3" next to a single bar reads as a
+              // limit the member is being warned about, on a surface where they
+              // can't do anything about it anyway.
+              slots: (used, max) => (used > 1 ? `${used}/${max}` : ""),
             }}
           />
         </div>

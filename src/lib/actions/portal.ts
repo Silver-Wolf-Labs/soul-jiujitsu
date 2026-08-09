@@ -7,7 +7,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { logAuditEvent } from "@/lib/audit";
 import { leaderboardOptOutSchema } from "@/lib/validations/leaderboard";
 import { trackedBadgeSchema } from "@/lib/validations/badge-tracker";
-import { badgeProgress, type TrackedBadgeState } from "@/lib/badge-progress";
+import { badgeProgress, MAX_TRACKED_BADGES, type TrackedBadgeEntry } from "@/lib/badge-progress";
 import { gymToday, gymPgDay } from "@/lib/gym-time";
 import { writeCheckIn, type AwardedBadge } from "@/lib/check-in-core";
 import type { KioskMemberStats, GymRankings } from "@/lib/actions/check-ins";
@@ -848,9 +848,15 @@ export async function setOwnLeaderboardOptOut(
 
 // ── Badge tracker ────────────────────────────────────────────────────────────
 //
-// One chosen badge, with a progress bar under it. The badge wall already shows
-// every unearned badge; what it can't show is how CLOSE you are to any of them,
-// because the rules live in the row and only SQL evaluates them.
+// Up to three chosen badges, each with a progress bar under it. The badge wall
+// already shows every unearned badge; what it can't show is how CLOSE you are to
+// any of them, because the rules live in the row and only SQL evaluates them.
+//
+// Three rather than one (20260816000000): a member chasing "50 clases" had nothing
+// to show for the Saturday they trained or the streak they were on, so a single
+// slot made every other kind of progress invisible. The cap itself is structural —
+// PRIMARY KEY (member_id, slot) + CHECK (slot BETWEEN 1 AND 3) — and the checks
+// here exist to produce a sentence a member can read instead of a database error.
 //
 // The counters come from member_badge_progress (20260814000000), which is also
 // what member_qualifies_for_badge is now defined in terms of. That indirection is
@@ -859,55 +865,79 @@ export async function setOwnLeaderboardOptOut(
 // and the award read the same function.
 
 /**
- * The badge the authenticated member is chasing, plus its progress.
+ * The badges the authenticated member is chasing, oldest first, with progress.
  *
- * Returns `{ badge: null }` rather than throwing when there is no objective —
- * that's the empty state, and it is also what a database that hasn't run
- * 20260813000000 yet looks like. A missing column must not take down a portal
- * page that renders fine without a tracker, which is the same reasoning
- * getOwnLeaderboardOptOut documents.
+ * Returns `[]` rather than throwing when there are no objectives — that's the
+ * empty state, and it is also what a database that hasn't run 20260816000000 yet
+ * looks like. A missing table must not take down a portal page that renders fine
+ * without a tracker, which is the same reasoning getOwnLeaderboardOptOut
+ * documents.
+ *
+ * Ordered by `created_at`, deliberately not by `slot`: slots are reused, so a
+ * member who drops their first goal and picks another would see the new one jump
+ * to the top of the card. See the migration's comment.
+ *
+ * The progress RPCs run concurrently — three sequential round trips on a page a
+ * member opens constantly is a cost with nothing to show for it, since no call
+ * depends on another's result.
  */
-export async function getOwnTrackedBadge(): Promise<TrackedBadgeState> {
+export async function getOwnTrackedBadges(): Promise<TrackedBadgeEntry[]> {
   const member = await resolveOwnMember();
   const service = createServiceClient();
 
-  const { data: row, error } = await service
-    .from("members")
-    .select(`tracked_badge_id, badges!members_tracked_badge_id_fkey (${BADGE_FIELDS})`)
-    .eq("id", member.id)
-    .maybeSingle();
+  const { data: rows, error } = await service
+    .from("member_tracked_badges")
+    .select(`badge_id, badges!member_tracked_badges_badge_id_fkey (${BADGE_FIELDS})`)
+    .eq("member_id", member.id)
+    .order("created_at");
 
-  // Includes "column does not exist" on a pre-migration database.
+  // Includes "relation does not exist" on a pre-migration database.
   if (error) throw new Error(error.message);
 
-  const badge = (row?.badges as unknown as Badge | null) ?? null;
-  if (!badge) return { badge: null, progress: { kind: "manual" } };
+  const badges = (rows ?? [])
+    .map((r) => (r as unknown as { badges: Badge | null }).badges)
+    .filter((b): b is Badge => b !== null);
+  if (badges.length === 0) return [];
 
   const today = await gymToday();
-  const { data: progressRows, error: progressError } = await service.rpc(
-    "member_badge_progress",
-    { p_member_id: member.id, p_badge_id: badge.id, p_today: today }
+
+  return Promise.all(
+    badges.map(async (badge) => {
+      const { data: progressRows, error: progressError } = await service.rpc(
+        "member_badge_progress",
+        { p_member_id: member.id, p_badge_id: badge.id, p_today: today }
+      );
+
+      // A progress RPC failure loses one bar, not the goal and not the other two:
+      // the member still sees which badge they picked, which is most of the value.
+      // `indeterminate` is the shape the UI already renders for "no number
+      // available", so a single failing rule degrades to a medal with no bar
+      // rather than an exception that empties the whole card.
+      if (progressError) {
+        console.error(
+          `[getOwnTrackedBadges] progress RPC failed for badge ${badge.id}:`,
+          progressError.message
+        );
+        return { badge, progress: { kind: "indeterminate", ruleKind: null } as const };
+      }
+
+      return { badge, progress: badgeProgress(progressRows?.[0] ?? null) };
+    })
   );
-
-  // A progress RPC failure loses the bar, not the goal: the member still sees
-  // which badge they picked, which is most of the value. `indeterminate` is the
-  // shape the UI already renders for "no number available".
-  if (progressError) {
-    console.error("[getOwnTrackedBadge] progress RPC failed:", progressError.message);
-    return { badge, progress: { kind: "indeterminate", ruleKind: null } };
-  }
-
-  return { badge, progress: badgeProgress(progressRows?.[0] ?? null) };
 }
 
 /**
  * Badges the member may pick as an objective.
  *
- * Three exclusions, and each has its own reason:
+ * Four exclusions, and each has its own reason:
  *
  *   • already earned — there is nothing left to track, and the award trigger
- *     clears the objective anyway (20260813000000), so offering it would produce
+ *     removes the objective anyway (20260816000000), so offering it would produce
  *     a goal that erases itself.
+ *   • already being tracked — with three slots this is newly possible and it is
+ *     the one exclusion the database would also catch, via
+ *     UNIQUE (member_id, badge_id). Filtering it here is what turns "duplicate key
+ *     value violates unique constraint" into a row the picker simply doesn't show.
  *   • secret — the badge exists to be a surprise. Listing it in a picker spoils
  *     it more thoroughly than the locked grid ever could, since the picker shows
  *     the name and description.
@@ -923,7 +953,7 @@ export async function getTrackableBadges(): Promise<Badge[]> {
   const member = await resolveOwnMember();
   const service = createServiceClient();
 
-  const [catalogueResult, earnedResult] = await Promise.all([
+  const [catalogueResult, earnedResult, trackedResult] = await Promise.all([
     service
       .from("badges")
       .select(BADGE_FIELDS)
@@ -932,73 +962,175 @@ export async function getTrackableBadges(): Promise<Badge[]> {
       .not("rule_kind", "is", null)
       .order("sort_order"),
     service.from("member_badges").select("badge_id").eq("member_id", member.id),
+    service.from("member_tracked_badges").select("badge_id").eq("member_id", member.id),
   ]);
 
   if (catalogueResult.error) throw new Error(catalogueResult.error.message);
   if (earnedResult.error) throw new Error(earnedResult.error.message);
+  if (trackedResult.error) throw new Error(trackedResult.error.message);
 
-  const earnedIds = new Set((earnedResult.data ?? []).map((r) => r.badge_id as number));
-  return ((catalogueResult.data ?? []) as unknown as Badge[]).filter((b) => !earnedIds.has(b.id));
+  const excluded = new Set([
+    ...(earnedResult.data ?? []).map((r) => r.badge_id as number),
+    ...(trackedResult.data ?? []).map((r) => r.badge_id as number),
+  ]);
+  return ((catalogueResult.data ?? []) as unknown as Badge[]).filter((b) => !excluded.has(b.id));
 }
 
 /**
- * Sets or clears the authenticated member's objective. `null` clears it.
+ * Resolves the calling session to a member id for a tracker write.
  *
- * Only the member themselves: there is no member-id parameter, and the write is
- * scoped by `user_id` from the session — the same shape as setOwnLeaderboardOptOut,
- * and it matters for the same reason. This is a column the member IS allowed to
- * change, so the service client (which bypasses RLS) writing the wrong row would
- * succeed silently.
- *
- * Eligibility is re-checked here rather than trusted from the picker, because a
- * server action is a public endpoint and the picker is just a UI. The two checks
- * that are security rather than UX — secret and inactive — are enforced a third
- * time by trg_enforce_tracked_badge_eligible, since `members` has an UPDATE policy
- * for a member's own row and this action is not the only door.
- *
- * Not audited, deliberately. logAuditEvent exists for changes somebody might later
- * need to account for — what another member can see, what a membership costs. Which
- * badge you feel like chasing this month is nobody's business but yours, and
- * writing it to an audit trail an admin reads would make a private choice
- * reviewable.
+ * Separate from resolveOwnMember() because these two actions need an *error
+ * string*, not an exception: `resolveOwnMember` throws, and both callers return
+ * `{ error }` so the card can show a sentence next to the button that caused it.
+ * The lookup is by `user_id` from the session rather than an id from the client —
+ * the same shape as setOwnLeaderboardOptOut, and it matters for the same reason.
+ * The service client bypasses RLS, so writing the wrong row would succeed
+ * silently.
  */
-export async function setOwnTrackedBadge(
-  badgeId: number | null
-): Promise<{ success: true; badgeId: number | null } | { error: string }> {
-  const t = await errors();
-  const parsed = trackedBadgeSchema.safeParse({ badge_id: badgeId });
-  if (!parsed.success) return { error: t("generic") };
-
+async function resolveOwnMemberIdForTracker(
+  t: Awaited<ReturnType<typeof errors>>
+): Promise<{ memberId: number } | { error: string }> {
   const supabase = createClient();
   const { data: userData, error: authError } = await supabase.auth.getUser();
   if (authError || !userData.user) return { error: t("notAuthenticated") };
 
-  const service = createServiceClient();
-  const target = parsed.data.badge_id;
-
-  if (target !== null) {
-    const eligible = await getTrackableBadges();
-    if (!eligible.some((b) => b.id === target)) return { error: t("badgeNotTrackable") };
-  }
-
-  const { data, error } = await service
+  const { data, error } = await createServiceClient()
     .from("members")
-    .update({ tracked_badge_id: target })
+    .select("id")
     .eq("user_id", userData.user.id)
-    .select("id, tracked_badge_id")
     .maybeSingle();
 
   if (error) {
-    console.error("[setOwnTrackedBadge] update failed:", error.message);
+    console.error("[tracker] member lookup failed:", error.message);
     return { error: t("generic") };
   }
-  // No row updated: a valid session that isn't linked to a member (an admin-only
-  // account). Distinct from a write error, and neither is the generic message.
+  // A valid session that isn't linked to a member (an admin-only account).
+  // Distinct from a write error, and neither is the generic message.
   if (!data) return { error: t("memberNotFound") };
 
+  return { memberId: data.id as number };
+}
+
+/**
+ * Adds a badge to the authenticated member's objectives, up to three.
+ *
+ * Add-one rather than replace-the-set: a set-based action would make "drop one of
+ * my three" a request that carries the other two, and a client that computed that
+ * list from a stale render would silently delete a goal the member added on their
+ * phone a minute ago. Add and remove each name exactly the badge they act on.
+ *
+ * The slot is chosen here — the lowest free number in 1..3 — rather than by a
+ * sequence, because slots are meant to be reused: PRIMARY KEY (member_id, slot)
+ * with CHECK (slot BETWEEN 1 AND 3) is what caps the member at three, and a
+ * monotonic counter would exhaust the range after three adds and removes. Display
+ * order is `created_at`, so which slot a goal lands in is invisible.
+ *
+ * Two writers racing here both compute the same free slot and one loses on the
+ * primary key. That is the intended outcome and it is why the cap lives in the
+ * index: the loser gets `alreadyTrackingMax` below, not a fourth goal.
+ *
+ * Eligibility is re-checked rather than trusted from the picker, because a server
+ * action is a public endpoint and the picker is just a UI. The two checks that are
+ * security rather than UX — secret and inactive — are enforced again by
+ * trg_enforce_tracked_badge_eligible, which is the only one of the three that runs
+ * on the service client's writes at all.
+ *
+ * Not audited, deliberately. logAuditEvent exists for changes somebody might later
+ * need to account for — what another member can see, what a membership costs. Which
+ * badges you feel like chasing this month is nobody's business but yours, and
+ * writing it to an audit trail an admin reads would make a private choice
+ * reviewable.
+ */
+export async function addOwnTrackedBadge(
+  badgeId: number
+): Promise<{ success: true; badgeId: number } | { error: string }> {
+  const t = await errors();
+  const parsed = trackedBadgeSchema.safeParse({ badge_id: badgeId });
+  if (!parsed.success) return { error: t("generic") };
+  const target = parsed.data.badge_id;
+
+  const resolved = await resolveOwnMemberIdForTracker(t);
+  if ("error" in resolved) return resolved;
+  const { memberId } = resolved;
+
+  const service = createServiceClient();
+
+  // Eligible = active, not secret, has a rule, not already earned, not already
+  // tracked. The last of those is what makes a double-tap on the picker return a
+  // sentence instead of a unique-constraint violation.
+  const eligible = await getTrackableBadges();
+  if (!eligible.some((b) => b.id === target)) return { error: t("badgeNotTrackable") };
+
+  const { data: existing, error: existingError } = await service
+    .from("member_tracked_badges")
+    .select("slot")
+    .eq("member_id", memberId);
+
+  if (existingError) {
+    console.error("[addOwnTrackedBadge] slot read failed:", existingError.message);
+    return { error: t("generic") };
+  }
+
+  const taken = new Set((existing ?? []).map((r) => r.slot as number));
+  const slot = Array.from({ length: MAX_TRACKED_BADGES }, (_, i) => i + 1).find(
+    (n) => !taken.has(n)
+  );
+  if (slot === undefined) return { error: t("alreadyTrackingMax") };
+
+  const { error } = await service
+    .from("member_tracked_badges")
+    .insert({ member_id: memberId, badge_id: target, slot });
+
+  if (error) {
+    console.error("[addOwnTrackedBadge] insert failed:", error.message);
+    // 23505 is unique_violation: either the badge is already tracked or a
+    // concurrent add took the slot this call picked. Both mean "no room / already
+    // there" from the member's side, and neither is the generic message.
+    if (error.code === "23505") return { error: t("alreadyTrackingMax") };
+    return { error: t("generic") };
+  }
+
   // The tracker is server-rendered into /portal, so a later navigation there must
-  // not serve a cached page still showing the old goal.
+  // not serve a cached page still showing the old goals.
   revalidatePath("/portal");
 
-  return { success: true, badgeId: (data.tracked_badge_id as number | null) ?? null };
+  return { success: true, badgeId: target };
+}
+
+/**
+ * Removes one badge from the authenticated member's objectives.
+ *
+ * Scoped by `member_id` resolved from the session, not passed in: the service
+ * client bypasses RLS, so an unscoped delete would happily remove another member's
+ * goal.
+ *
+ * Deleting a row that isn't there is a success, not an error. The member's intent —
+ * "I am not chasing this" — is satisfied either way, and the case that produces it
+ * is a double-tap or a stale card, neither of which is worth an error message.
+ */
+export async function removeOwnTrackedBadge(
+  badgeId: number
+): Promise<{ success: true; badgeId: number } | { error: string }> {
+  const t = await errors();
+  const parsed = trackedBadgeSchema.safeParse({ badge_id: badgeId });
+  if (!parsed.success) return { error: t("generic") };
+  const target = parsed.data.badge_id;
+
+  const resolved = await resolveOwnMemberIdForTracker(t);
+  if ("error" in resolved) return resolved;
+
+  const { error } = await createServiceClient()
+    .from("member_tracked_badges")
+    .delete()
+    .eq("member_id", resolved.memberId)
+    .eq("badge_id", target);
+
+  if (error) {
+    console.error("[removeOwnTrackedBadge] delete failed:", error.message);
+    return { error: t("generic") };
+  }
+
+  revalidatePath("/portal");
+
+  return { success: true, badgeId: target };
 }

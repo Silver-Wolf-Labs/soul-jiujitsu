@@ -176,8 +176,25 @@ export function badgeProgressPercent(progress: BadgeProgress): number {
 }
 
 /**
- * The tracker's whole payload: which badge is being chased and how far along it
- * is. `badge: null` means no objective — the empty state, not an error.
+ * How many badges a member may chase at once.
+ *
+ * This is a MIRROR, not the source of truth. The cap is enforced structurally by
+ * `PRIMARY KEY (member_id, slot)` + `CHECK (slot BETWEEN 1 AND 3)` in
+ * 20260816000000_tracked_badges_multi.sql, because a trigger that counts rows
+ * loses to two concurrent inserts. What this constant buys is a picker that can
+ * say "3 de 3" and disable itself, instead of letting a member tap a fourth badge
+ * and reading them a database error.
+ *
+ * Changing it here alone does nothing. The CHECK is the other half.
+ */
+export const MAX_TRACKED_BADGES = 3;
+
+/**
+ * One tracked badge: which badge is being chased and how far along it is.
+ *
+ * `badge` is non-nullable — an entry that exists IS a goal. "No goals" is the
+ * empty array, which is a state the list's container renders (a heading plus a
+ * call to action) rather than something an individual tracker can express.
  *
  * Lives here rather than in supabase/types.ts because it is not a table shape:
  * it is a badge row joined to the output of badgeProgress() above, and it is what
@@ -186,9 +203,20 @@ export function badgeProgressPercent(progress: BadgeProgress): number {
  * The Badge import is type-only, so this module stays free of runtime imports and
  * remains safe to unit-test on its own.
  */
-export interface TrackedBadgeState {
-  badge: import("@/lib/supabase/types").Badge | null;
+export interface TrackedBadgeEntry {
+  badge: import("@/lib/supabase/types").Badge;
   progress: BadgeProgress;
+}
+
+/**
+ * Whether the member has room for another goal.
+ *
+ * A named predicate rather than `list.length < 3` inlined at three call sites: the
+ * portal disables its "add" button on it, the picker greys its rows on it, and the
+ * server action refuses on it, and those three must agree.
+ */
+export function canTrackMore(tracked: readonly TrackedBadgeEntry[]): boolean {
+  return tracked.length < MAX_TRACKED_BADGES;
 }
 
 /** Whether the tracker should show a bar at all. */

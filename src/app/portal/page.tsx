@@ -15,9 +15,9 @@ import {
   getTeamLeaderboard,
   getTeamActivity,
   getOwnLeaderboardOptOut,
-  getOwnTrackedBadge,
+  getOwnTrackedBadges,
 } from "@/lib/actions/portal";
-import type { TrackedBadgeState } from "@/lib/badge-progress";
+import type { TrackedBadgeEntry } from "@/lib/badge-progress";
 import SelfCheckInCard from "./SelfCheckInCard";
 import TeamFeed from "@/components/member/TeamFeed";
 import type { PortalTodayClass } from "@/lib/actions/portal";
@@ -153,14 +153,15 @@ export default async function PortalHomePage() {
   }
   const unseenBadges = badges.earned.filter((b) => b.seen_at === null);
 
-  // The tracked badge, in its own try/catch and deliberately not bundled with the
-  // pair above. It reads a column that only exists after 20260813000000 and an RPC
-  // that only exists after 20260814000000 — a deploy that gets ahead of either must
-  // not take the badge wall down with it. "No goal" is the honest fallback: it is
-  // also what a member who hasn't picked one sees.
-  let tracked: TrackedBadgeState = { badge: null, progress: { kind: "manual" } };
+  // The tracked badges, in their own try/catch and deliberately not bundled with
+  // the pair above. This reads a table that only exists after 20260816000000 and an
+  // RPC that only exists after 20260814000000 — a deploy that gets ahead of either
+  // must not take the badge wall down with it. That fallback is also why the
+  // migration is safe to apply AFTER this code ships: an empty list is exactly what
+  // a member who hasn't picked any goals sees.
+  let tracked: TrackedBadgeEntry[] = [];
   try {
-    tracked = await getOwnTrackedBadge();
+    tracked = await getOwnTrackedBadges();
   } catch {
     // Falls back to the empty tracker.
   }

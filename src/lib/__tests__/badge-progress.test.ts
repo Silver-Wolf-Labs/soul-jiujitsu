@@ -2,8 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   badgeProgress,
   badgeProgressPercent,
+  canTrackMore,
   hasProgressBar,
+  MAX_TRACKED_BADGES,
   type BadgeProgressRow,
+  type TrackedBadgeEntry,
 } from "../badge-progress";
 
 /**
@@ -194,5 +197,44 @@ describe("hasProgressBar", () => {
     expect(hasProgressBar({ kind: "manual" })).toBe(false);
     expect(hasProgressBar({ kind: "binary", ruleKind: "perfect_month", complete: true })).toBe(false);
     expect(hasProgressBar({ kind: "indeterminate", ruleKind: "x" })).toBe(false);
+  });
+});
+
+/**
+ * The three-goal cap is enforced by the database — PRIMARY KEY (member_id, slot)
+ * plus CHECK (slot BETWEEN 1 AND 3) in 20260816000000 — and cannot be tested from
+ * here. What IS testable is the predicate three surfaces branch on: the portal
+ * disables its "add" button on it, the picker greys its rows on it, and the server
+ * action refuses on it. If those three ever disagree, a member taps a fourth badge
+ * and gets a unique-constraint violation instead of a sentence.
+ */
+describe("canTrackMore", () => {
+  /** A tracked entry; only the length of the list matters to the predicate. */
+  const entry = (id: number) =>
+    ({ badge: { id }, progress: { kind: "manual" } }) as unknown as TrackedBadgeEntry;
+
+  it("allows a first goal", () => {
+    expect(canTrackMore([])).toBe(true);
+  });
+
+  it("allows another below the cap", () => {
+    expect(canTrackMore([entry(1), entry(2)])).toBe(true);
+  });
+
+  it("refuses at the cap", () => {
+    expect(canTrackMore([entry(1), entry(2), entry(3)])).toBe(false);
+  });
+
+  it("refuses past the cap", () => {
+    // Not reachable through the app, but the boundary must be `<` and not `!==`:
+    // an admin-side insert or a future migration bump could leave a member over,
+    // and the answer to "room for one more?" is still no.
+    expect(canTrackMore([entry(1), entry(2), entry(3), entry(4)])).toBe(false);
+  });
+
+  it("agrees with MAX_TRACKED_BADGES rather than a hardcoded 3", () => {
+    const full = Array.from({ length: MAX_TRACKED_BADGES }, (_, i) => entry(i + 1));
+    expect(canTrackMore(full)).toBe(false);
+    expect(canTrackMore(full.slice(0, -1))).toBe(true);
   });
 });
