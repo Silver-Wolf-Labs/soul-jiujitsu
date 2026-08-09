@@ -175,6 +175,20 @@ password_requirements = ""
 
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
+#
+# 2/hour is Supabase's default and it is PROJECT-WIDE, not per-user: two signups
+# in the same hour and the third member is told "email rate limit exceeded" with
+# no way to retry. That is what happened on 2026-08-09 (see [auth.email.smtp]).
+#
+# Raising this number only does something once custom SMTP is enabled — the
+# comment above is a hard requirement, not advice. Until then the built-in mailer
+# enforces its own 2/hour regardless of what is written here.
+#
+# Left at 2 because this file configures the LOCAL stack, where mail goes to
+# inbucket and a low cap is harmless. The production value is set in the
+# dashboard alongside the SMTP credentials (Authentication → Rate Limits);
+# 30/hour is enough for a gym of this size and still bounds the damage if a
+# signup form is ever hammered.
 email_sent = 2
 # Number of SMS messages that can be sent per hour. Requires auth.sms to be enabled.
 sms_sent = 30
@@ -212,15 +226,49 @@ otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
-# Use a production-ready SMTP server
-# [auth.email.smtp]
-# enabled = true
-# host = "smtp.sendgrid.net"
-# port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# ── Production SMTP: Resend ──────────────────────────────────────────────────
+#
+# WHY THIS EXISTS AT ALL: Supabase's built-in mailer is capped at 2 emails per
+# hour PROJECT-WIDE and is documented as being for development only. On
+# 2026-08-09 that cap is what produced "email rate limit exceeded" for a profe
+# trying to sign up — his auth.users row was created unconfirmed and the
+# confirmation mail was never sent, which looks like a broken site and not like a
+# quota. Custom SMTP raises the ceiling to thousands per day and, just as
+# importantly, makes the From address noreply@souljiujitsucr.com instead of a
+# Supabase-owned domain, so the mail is aligned with the gym's own SPF/DKIM and
+# stops landing in spam.
+#
+# ── enabled = false is DELIBERATE, and this block is still not decoration ────
+#
+# This file configures the LOCAL stack (`supabase start`). Locally, auth mail is
+# caught by inbucket (see [inbucket] above, port 54324) and nothing leaves the
+# machine. Flipping `enabled = true` here would point local development at the
+# real Resend account: every signup while testing would spend live quota and,
+# far worse, would deliver actual mail to whatever address got typed into a seed
+# script. Development must not be able to email a member.
+#
+# PRODUCTION IS CONFIGURED IN THE DASHBOARD, not from this file:
+#   Authentication → Emails → SMTP Settings, on project fosgqmiqqdrrgoqghcgc.
+# The values below are the exact ones that belong in those fields, recorded here
+# because the dashboard is not in version control and the next person otherwise
+# has to rediscover the host, the port and the literal username "resend".
+#
+# The API key is NOT here and must never be. It lives in the dashboard field
+# only — the app itself sends no mail (there is no nodemailer, no Resend SDK
+# anywhere in src/), so no build and no runtime needs this credential. That is
+# also why it is absent from scripts/amplify-sync-env.sh.
+#
+# Port 587 (STARTTLS) rather than 465: it is what Resend documents first and
+# what Supabase's mailer expects by default. `user` is the literal string
+# "resend" for every account — it is not a placeholder to substitute.
+[auth.email.smtp]
+enabled = false
+host = "smtp.resend.com"
+port = 587
+user = "resend"
+pass = "env(RESEND_API_KEY)"
+admin_email = "noreply@souljiujitsucr.com"
+sender_name = "Soul Jiu Jitsu"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
