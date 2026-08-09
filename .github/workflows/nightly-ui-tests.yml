@@ -18,7 +18,12 @@ on:
     # That is fine for a nightly; it is not fine to schedule on the hour, which
     # is the most contended slot on GitHub's shared runners — hence :00 avoided
     # in favour of a quieter minute below.
-    - cron: "7 8 * * *"
+    #
+    # Monday + Friday rather than nightly: the org hit 90% of its included
+    # Actions storage, and Playwright reports/traces are what fill it. Two
+    # runs a week still catch a regression within ~3 days, which is well
+    # inside the window that matters for an unattended suite.
+    - cron: "7 8 * * 1,5"
 
   workflow_dispatch:
     inputs:
@@ -221,7 +226,7 @@ jobs:
           path: e2e/.artifacts/html-report
           # 30 days: long enough to compare against last month's run when
           # investigating a slow regression, short enough not to hoard storage.
-          retention-days: 30
+          retention-days: 7
 
       - name: Upload traces, videos, and screenshots
         # Only on failure — these are the large artifacts and there is nothing to
@@ -231,7 +236,7 @@ jobs:
         with:
           name: playwright-failure-artifacts
           path: e2e/.artifacts/test-results
-          retention-days: 14
+          retention-days: 7
           if-no-files-found: ignore
 
       - name: Upload machine-readable summary
